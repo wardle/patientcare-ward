@@ -17,6 +17,7 @@
   (let [error (rf/subscribe [:user/login-error])
         username (reagent/atom "")
         password (reagent/atom "")
+        doLogin #(rf/dispatch [:user/attempt-login default-namespace (string/trim @username) @password])
         ]
     (fn []
       [:section.hero.is-full-height
@@ -26,21 +27,27 @@
           [:div.column.is-5-tablet.is-4-desktop.is-3-widescreen
            [patientcare-title]
            [:div.box
-            ;; username field
+            ;; username field - if user presses enter, automatically switch to password field
             [:div.field [:label.label {:for "login-un"} "Username"]
              [:div.control
-              [:input.input {:id "login-un" :type "text" :placeholder "e.g. ma090906" :required true :on-blur #(reset! username (-> % .-target .-value))}]]]
+              [:input.input {:id      "login-un" :type "text" :placeholder "e.g. ma090906" :required true
+                             :on-key-down #(if (= 13 (.-which %)) (do (.focus (.getElementById js/document "login-pw"))))
+                             :on-blur #(reset! username (-> % .-target .-value))}]]]
 
+            ;; password field - if user presses enter, automatically submit
             [:div.field [:label.label {:for "login-pw"} "Password"]
              [:div.control
-              [:input.input {:id "login-pw" :type "password" :placeholder "enter password" :required true :on-blur #(reset! password (-> % .-target .-value))}]]]
+              [:input.input {:id        "login-pw" :type "password" :placeholder "enter password" :required true
+                             :on-key-down #(if (= 13 (.-which %)) (do
+                                                                  (reset! password (-> % .-target .-value))
+                                                                  (doLogin)))
+                             :on-blur   #(reset! password (-> % .-target .-value))}]]]
 
             [:button.button {:class    "is-primary"
-                             :on-click #(rf/dispatch [:user/attempt-login default-namespace (string/trim @username) @password])} " Login "]
+                             :on-click doLogin} " Login "]
 
             ]
-           (if-not (string/blank? @error)
-             [:div.notification.is-danger [:p "Error:" @error]])]]]]])))
+           (if-not (string/blank? @error) [:div.notification.is-danger [:p "Error:" @error]])]]]]])))
 
 (defn logout-button [] [:button.button {:on-click #(rf/dispatch [:user/logout])} "Logout"])
 
@@ -83,3 +90,12 @@
         [show-panel @active-panel]))))
 
 
+
+(comment
+
+  #(case (.-which %)
+     13 ("It's thirteen")                                   ; enter
+     20 ("It's twenty")                                     ; esc
+     nil)
+
+  )
