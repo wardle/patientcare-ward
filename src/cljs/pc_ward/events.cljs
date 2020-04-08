@@ -28,8 +28,9 @@
                  (assoc db :login-error "Invalid username or password"))
                (do
                  (js/console.log "Attempting login for user" username)
-                 (assoc db :name username :authenticated-user username)
-                 ))))
+                 (-> db
+                     (dissoc :login-error)
+                     (assoc :name username :authenticated-user username))))))
 
 
 
