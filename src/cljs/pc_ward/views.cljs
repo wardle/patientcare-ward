@@ -17,7 +17,7 @@
   (let [error (rf/subscribe [:user/login-error])
         username (reagent/atom "")
         password (reagent/atom "")
-        doLogin #(rf/dispatch [:user/service-login-start default-user-namespace (string/trim @username) @password])
+        doLogin #(rf/dispatch [:user/user-login-start default-user-namespace (string/trim @username) @password])
         ]
     (fn []
       [:section.hero.is-full-height

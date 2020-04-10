@@ -21,6 +21,14 @@
           UtcDateTime/fromTimestamp)
   )
 
+(defn jwt-expires-seconds
+  "Gives the number of seconds that this token will remain valid"
+  [token]
+  (if (string/blank? token)
+    0
+    (- (:exp (jwt-token-payload token)) (int (/ (.getTime (js/Date.)) 1000)))
+    ))
+
 (defn jwt-expires-in-seconds?
   "Does the token expire within the next (x) seconds? Returns true if no token"
   [token, sec]
@@ -30,6 +38,19 @@
           dln (+ now sec)
           exp (:exp (jwt-token-payload token))]
       (> dln exp)
+      ))
+  )
+
+
+
+(defn jwt-valid?
+  "Is the token non-nil and not expired? This does not test the token cryptographically"
+  [token]
+  (if (string/blank? token)
+    false
+    (let [now (int (/ (.getTime (js/Date.)) 1000))
+          exp (:exp (jwt-token-payload token))]
+      (> now exp)
       ))
   )
 
