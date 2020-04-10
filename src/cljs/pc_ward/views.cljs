@@ -6,8 +6,8 @@
     [pc-ward.subs :as subs]
     ))
 
-
-(def default-namespace "https://fhir.nhs.uk/Id/cymru-user-id")
+;; concievably our UI could allow selection from a list of "providers".
+(def default-user-namespace "https://fhir.nhs.uk/Id/cymru-user-id")
 
 
 (defn patientcare-title []
@@ -17,7 +17,7 @@
   (let [error (rf/subscribe [:user/login-error])
         username (reagent/atom "")
         password (reagent/atom "")
-        doLogin #(rf/dispatch [:user/attempt-login default-namespace (string/trim @username) @password])
+        doLogin #(rf/dispatch [:user/service-login-start default-user-namespace (string/trim @username) @password])
         ]
     (fn []
       [:section.hero.is-full-height
@@ -30,18 +30,18 @@
             ;; username field - if user presses enter, automatically switch to password field
             [:div.field [:label.label {:for "login-un"} "Username"]
              [:div.control
-              [:input.input {:id      "login-un" :type "text" :placeholder "e.g. ma090906" :required true
+              [:input.input {:id          "login-un" :type "text" :placeholder "e.g. ma090906" :required true
                              :on-key-down #(if (= 13 (.-which %)) (do (.focus (.getElementById js/document "login-pw"))))
-                             :on-blur #(reset! username (-> % .-target .-value))}]]]
+                             :on-blur     #(reset! username (-> % .-target .-value))}]]]
 
             ;; password field - if user presses enter, automatically submit
             [:div.field [:label.label {:for "login-pw"} "Password"]
              [:div.control
-              [:input.input {:id        "login-pw" :type "password" :placeholder "enter password" :required true
+              [:input.input {:id          "login-pw" :type "password" :placeholder "enter password" :required true
                              :on-key-down #(if (= 13 (.-which %)) (do
-                                                                  (reset! password (-> % .-target .-value))
-                                                                  (doLogin)))
-                             :on-blur   #(reset! password (-> % .-target .-value))}]]]
+                                                                    (reset! password (-> % .-target .-value))
+                                                                    (doLogin)))
+                             :on-blur     #(reset! password (-> % .-target .-value))}]]]
 
             [:button.button {:class    "is-primary"
                              :on-click doLogin} " Login "]

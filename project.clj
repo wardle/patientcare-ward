@@ -7,6 +7,7 @@
                  [thheller/shadow-cljs "2.8.83"]
                  [reagent "0.9.1"]
                  [re-frame "0.11.0"]
+                 [day8.re-frame/http-fx "v0.2.0"]
                  [secretary "1.2.3"]
                  [garden "1.3.9"]
                  [ns-tracker "0.4.0"]]
