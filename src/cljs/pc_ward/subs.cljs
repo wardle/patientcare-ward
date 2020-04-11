@@ -12,6 +12,10 @@
   (fn [db _]
     (:active-panel db)))
 
+(re-frame/reg-sub
+  :show-foreground-spinner
+  (fn [db _]
+  (:show-foreground-spinner db)))
 
 (re-frame/reg-sub
   :user/authenticated-user

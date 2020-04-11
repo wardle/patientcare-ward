@@ -17,8 +17,8 @@
   (let [error (rf/subscribe [:user/login-error])
         username (reagent/atom "")
         password (reagent/atom "")
-        doLogin #(rf/dispatch [:user/user-login-start default-user-namespace (string/trim @username) @password])
-        ]
+        submitting (rf/subscribe [:show-foreground-spinner])
+        doLogin #(rf/dispatch [:user/user-login-start default-user-namespace (string/trim @username) @password])]
     (fn []
       [:section.hero.is-full-height
        [:div.hero-body
@@ -31,6 +31,7 @@
             [:div.field [:label.label {:for "login-un"} "Username"]
              [:div.control
               [:input.input {:id          "login-un" :type "text" :placeholder "e.g. ma090906" :required true
+                             :disabled  @submitting
                              :on-key-down #(if (= 13 (.-which %)) (do (.focus (.getElementById js/document "login-pw"))))
                              :on-blur     #(reset! username (-> % .-target .-value))}]]]
 
@@ -38,16 +39,18 @@
             [:div.field [:label.label {:for "login-pw"} "Password"]
              [:div.control
               [:input.input {:id          "login-pw" :type "password" :placeholder "enter password" :required true
+                             :disabled @submitting
                              :on-key-down #(if (= 13 (.-which %)) (do
                                                                     (reset! password (-> % .-target .-value))
                                                                     (doLogin)))
                              :on-blur     #(reset! password (-> % .-target .-value))}]]]
 
-            [:button.button {:class    "is-primary"
-                             :on-click doLogin} " Login "]
 
+            [:button.button {:class ["is-primary" (when @submitting "is-loading")]
+                             :disabled @submitting
+                             :on-click doLogin} " Login "]
             ]
-           (if-not (string/blank? @error) [:div.notification.is-danger [:p "Error:" @error]])]]]]])))
+           (if-not (string/blank? @error) [:div.notification.is-danger [:p @error]])]]]]])))
 
 (defn logout-button [] [:button.button {:on-click #(rf/dispatch [:user/logout])} "Logout"])
 

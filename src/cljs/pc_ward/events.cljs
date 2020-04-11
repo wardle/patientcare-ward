@@ -45,7 +45,8 @@
     (js/console.log "attempting login " username)
     (if (or (string/blank? username) (string/blank? password))
       {:db (assoc db :login-error "Invalid username or password")}
-      {:dispatch [:user/service-login-start [:user/user-login-do namespace username password]]}
+      {:db       (assoc db :show-foreground-spinner true)
+       :dispatch [:user/service-login-start [:user/user-login-do namespace username password]]}
       )))
 
 (re-frame/reg-event-fx
@@ -76,6 +77,7 @@
     (js/console.log "User login success: response: " + response)
     (-> db
         (dissoc :login-error)
+        (assoc :show-foreground-spinner false)
         (assoc :name username :authenticated-user username)
         (assoc :authenticated-user-token (:token response)))))
 
@@ -83,12 +85,14 @@
   :user/user-login-failure
   (fn [db [_ response]]
     (js/console.log "User login failure: response: " + response)
-    (assoc db :login-error (:status-text response))))
+    (-> db
+        (assoc :login-error (:status-text response))
+        (assoc :show-foreground-spinner false))))
 
 
 
 
-    (defn create-service-token-map
+(defn create-service-token-map
   [db next-event]
   {:db         (assoc db :show-background-spinner true)     ;; causes the twirly-waiting-dialog to show??
    :http-xhrio {:method          :post
@@ -135,7 +139,7 @@
       (cond
         (> expires 120) (if-not (empty? next-event) {:dispatch next-event}) ; if we've more than 120 seconds on the clock, just keep using old token
         (> expires 30) (refresh-service-token-map db next-event) ; token is due to expire, so refresh token
-        :else (create-service-token-map db next-event)))))   ; grab a new token using our service credentials
+        :else (create-service-token-map db next-event)))))  ; grab a new token using our service credentials
 
 ;; user/service-login-success simply processes the successful service login response
 ;; and stores the token received from concierge
@@ -157,6 +161,7 @@
     {:db (-> db
              (assoc :error (:status-text response))
              (assoc :login-error (:status-text response))
+             (assoc :show-foreground-spinner false)
              (assoc :show-background-spinner false))}
     ))
 
