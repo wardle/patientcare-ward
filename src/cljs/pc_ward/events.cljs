@@ -45,16 +45,17 @@
     (js/console.log "attempting login " username)
     (if (or (string/blank? username) (string/blank? password))
       {:db (assoc db :login-error "Invalid username or password")}
-      {:db       (assoc db :show-foreground-spinner true)
-       :dispatch [:user/service-login-start [:user/user-login-do namespace username password]]}
+      {:db         (assoc db :show-foreground-spinner true)
+       :dispatch-n [[:user/foreground-spinner true]
+                    [:user/service-login-start [:user/user-login-do namespace username password]]
+                    [:user/foreground-spinner false]]}
       )))
 
 (re-frame/reg-event-fx
   :user/user-login-do
   (fn [{db :db} [_ namespace username password]]
     (js/console.log "doing login " username)
-    {:db         (assoc db :show-foreground-spinner true)
-     :http-xhrio {:method          :post
+    {:http-xhrio {:method          :post
                   :uri             "http://localhost:8080/v1/login"
                   :timeout         5000
                   :format          (ajax/json-request-format)
@@ -72,24 +73,25 @@
 
 
 (re-frame/reg-event-db
+  :user/foreground-spinner
+  (fn [db [_ on]]
+    (assoc db :show-foreground-spinner on)))
+
+(re-frame/reg-event-db
   :user/user-login-success
   (fn [db [_ namespace username response]]
     (js/console.log "User login success: response: " + response)
     (-> db
         (dissoc :login-error)
-        (assoc :show-foreground-spinner false)
         (assoc :name username :authenticated-user username)
         (assoc :authenticated-user-token (:token response)))))
+
 
 (re-frame/reg-event-db
   :user/user-login-failure
   (fn [db [_ response]]
     (js/console.log "User login failure: response: " + response)
-    (-> db
-        (assoc :login-error (:status-text response))
-        (assoc :show-foreground-spinner false))))
-
-
+    (assoc db :login-error (:status-text response))))
 
 
 (defn create-service-token-map
@@ -108,7 +110,7 @@
                                   }
                 :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
                 :on-success      [:user/service-login-success next-event]
-                :on-failure      [:bad-http-result]}})
+                :on-failure      [:user/service-login-failure]}})
 
 (defn refresh-service-token-map
   [db next-event]
@@ -120,7 +122,7 @@
                 :format          (ajax/json-request-format)
                 :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
                 :on-success      [:user/service-login-success next-event]
-                :on-failure      [:user/service-login-failure]}})
+                :on-failure      [:user/service-login-refresh-failure]}})
 
 
 ;; :user/service-login-start is an event raised to obtain a new service token, or refresh
@@ -130,6 +132,7 @@
 ;; see https://github.com/day8/re-frame/blob/master/docs/Talking-To-Servers.md
 ;; user/service-login-start kicks off a service-user login request, optionally
 ;; invoking the "next-event" once successful
+;; TODO: probably switch to an interceptor to annotate any events that need a service account token
 (re-frame/reg-event-fx
   :user/service-login-start
   [(when ^boolean goog.DEBUG re-frame.core/debug)]          ;; this is an interceptor
@@ -148,11 +151,17 @@
   [(when ^boolean goog.DEBUG re-frame.core/debug)]          ;; this is an interceptor
   (fn [{db :db} [_ next-event response]]
     (js/console.log "got token: " (:token response))
-    {:db       (-> db
-                   (assoc :concierge-service-token (:token response))
-                   (assoc :show-background-spinner false))
+    {:db       (assoc db :concierge-service-token (:token response))
      :dispatch next-event
      }))
+
+;; in the event of service account login token refresh failure,
+;; try a new login
+(re-frame/reg-event-fx
+  :user/service-login-refresh-failure
+  (fn [{db :db} [_ response]]
+    {:db       (dissoc db :concierge-service-token)
+     :dispatch :user/service-login-start}))
 
 (re-frame/reg-event-db
   :user/service-login-failure
@@ -160,9 +169,7 @@
     (js/console.log "bad http result : response " + response)
     {:db (-> db
              (assoc :error (:status-text response))
-             (assoc :login-error (:status-text response))
-             (assoc :show-foreground-spinner false)
-             (assoc :show-background-spinner false))}
+             (assoc :login-error (:status-text response)))}
     ))
 
 (re-frame/reg-event-db
