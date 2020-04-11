@@ -15,12 +15,25 @@
 (re-frame/reg-sub
   :show-foreground-spinner
   (fn [db _]
-  (:show-foreground-spinner db)))
+    (:show-foreground-spinner db)))
 
 (re-frame/reg-sub
   :user/authenticated-user
   (fn [db _]
     (:authenticated-user db)))
+
+(re-frame/reg-sub
+  :user/full-name
+  ;; first function is our subscription
+  (fn [query-v _]
+    (re-frame/subscribe [:user/authenticated-user]))
+  (fn [authenticated-user query_v _]
+    (let [human-name (first (:names authenticated-user))
+          title (clojure.string/join " " (:prefixes human-name))
+          first-names (:given human-name)
+          last-names (:family human-name)]
+      (str title " " first-names " " last-names)
+      )))
 
 (re-frame/reg-sub
   :user/login-error

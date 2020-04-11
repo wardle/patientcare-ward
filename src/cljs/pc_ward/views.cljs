@@ -58,7 +58,8 @@
 
 
 (defn nav-bar []
-  (let [show-nav-menu (reagent/atom false)]
+  (let [show-nav-menu (reagent/atom false)
+        full-name (rf/subscribe [:user/full-name])]
     (fn []
       [:container
        [:nav.navbar.is-black {:role "navigation" :aria-label "main navigation"}
@@ -84,7 +85,7 @@
             [:a.navbar-item "Report an issue"]]]]
          [:div.navbar-end
           [:div.navbar-item.has-dropdown.is-hoverable
-           [:a.navbar-link "Dr Mark Wardle"]
+           [:a.navbar-link @full-name]
            [:div.navbar-dropdown
             [:a.navbar-item "Profile"]
             [:a.navbar-item "Teams"]

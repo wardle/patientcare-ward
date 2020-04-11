@@ -9,10 +9,13 @@
     [day8.re-frame.tracing :refer-macros [fn-traced]]
     ))
 
+
 (re-frame/reg-event-db
   ::initialize-db
+  []
   (fn [_ _]
     db/default-db))
+
 
 (re-frame/reg-event-db
   ::set-active-panel
@@ -72,26 +75,61 @@
                   :on-failure      [:user/user-login-failure]}}))
 
 
+
 (re-frame/reg-event-db
   :user/foreground-spinner
   (fn [db [_ on]]
     (assoc db :show-foreground-spinner on)))
 
-(re-frame/reg-event-db
+(re-frame/reg-event-fx
   :user/user-login-success
-  (fn [db [_ namespace username response]]
+  (fn [{db :db} [_ namespace username response]]
     (js/console.log "User login success: response: " + response)
-    (-> db
-        (dissoc :login-error)
-        (assoc :name username :authenticated-user username)
-        (assoc :authenticated-user-token (:token response)))))
+    {:db       (-> db
+                   (dissoc :login-error)
+                   (assoc :authenticated-user-token (:token response)))
+     :dispatch [:concierge/resolve-identifier namespace username :user/set-authenticated-user :user/set-authenticated-user-failed]}))
 
+(re-frame/reg-event-db
+  :user/set-authenticated-user
+  (fn [db [_ response]]
+    (js/console.log "Fetched user... response: " response)
+    (assoc db :authenticated-user response)
+    ))
+
+(re-frame/reg-event-db
+  :user/set-authenticated-user-failed
+  (fn [db [_ response]]
+    (js/console.log "Fetched user... response: " response)
+    (-> db
+        (dissoc :name :authenticated-user-token)
+        (assoc :login-error (:status-text response)))))
 
 (re-frame/reg-event-db
   :user/user-login-failure
   (fn [db [_ response]]
     (js/console.log "User login failure: response: " + response)
     (assoc db :login-error (:status-text response))))
+
+
+
+
+(re-frame/reg-event-fx
+  :concierge/resolve-identifier
+  (fn [{db :db} [_ system value on-success on-failure]]
+    {:http-xhrio {:method          :get
+                  :uri             (str "http://localhost:8080/v1/identifier/" value)
+                  :timeout         5000
+                  :format          (ajax/json-request-format)
+                  :headers         {:Authorization (str "Bearer " (:authenticated-user-token db))}
+                  :params          {:system system}
+                  :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
+                  :on-success      [on-success]
+                  :on-failure      [on-failure]}}))
+
+
+
+
 
 
 (defn create-service-token-map
