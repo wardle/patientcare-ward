@@ -19,18 +19,6 @@
   (fn [db [_ active-panel]]
     (assoc db :active-panel active-panel)))
 
-(comment
-
-  )
-
-;; :user/get-service-token is an event raised to obtain a new service token, or refresh
-;; an existing token. In essence, this event can either be periodically triggered, or
-;; triggered just-in-time, in order to ensure that we have a valid service token.
-;; this event takes an optional additional event to trigger once it is complete
-
-
-
-
 ;; :user/attempt-login is an event triggered by a login attempt
 ;; this simply changes the name at the moment - it is fake and does no network calling
 ;; the handler is (db event) -> db; the event is a vector of values so we destructure
@@ -130,6 +118,11 @@
                 :on-success      [:user/service-login-success next-event]
                 :on-failure      [:user/service-login-failure]}})
 
+
+;; :user/service-login-start is an event raised to obtain a new service token, or refresh
+;; an existing token. In essence, this event can either be periodically triggered, or
+;; triggered just-in-time, in order to ensure that we have a valid service token.
+;; this event takes an optional additional event to trigger once it is complete
 ;; see https://github.com/day8/re-frame/blob/master/docs/Talking-To-Servers.md
 ;; user/service-login-start kicks off a service-user login request, optionally
 ;; invoking the "next-event" once successful
@@ -167,13 +160,10 @@
              (assoc :show-background-spinner false))}
     ))
 
-
-
 (re-frame/reg-event-db
   ::set-active-panel
   (fn [db [_ active-panel]]
     (assoc db :active-panel active-panel)))
-
 
 (re-frame/reg-event-db
   :user/logout
