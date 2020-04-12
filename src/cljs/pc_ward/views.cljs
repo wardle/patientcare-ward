@@ -4,6 +4,7 @@
     [clojure.string :as string]
     [reagent.core :as reagent]
     [pc-ward.subs :as subs]
+    [pc-ward.clinical :as clin]
     ))
 
 ;; concievably our UI could allow selection from a list of "providers".
@@ -113,6 +114,20 @@
            [:a.button.is-light {:on-click #(rf/dispatch [:user/logout])} "Logout"]]]]]])))
 
 
+
+(defn form-textfield
+  [v kp name help]
+  {:pre [(vector? kp)]}
+  (fn [v kp name help]
+    [:div.field
+     [:label.label name]
+     [:div.control
+      [:input.input {:type      "text" :placeholder name
+                     :value     (get-in @v kp)
+                     :on-change #(swap! v assoc-in kp (-> % .-target .-value))}]]
+     (if-not (clojure.string/blank? help) [:p.help help])]))
+
+
 (defn oxygen-saturations
   "Component to record o2 saturations and air/oxygen/device, with results pushed as map to atom (v) via keypath (kp)"
   [v kp]
@@ -124,10 +139,9 @@
      [:div.field-body
       [:div.field
        [:p.control.is-expanded.has-icons-left
-        [:input.input {:type "text" :placeholder "O2 sats"
-                       :value (get-in @v (conj kp :o2-saturations))
-                       :on-change #(swap! v assoc-in (conj kp :o2-saturations) (-> % .-target .-value))
-                       }]
+        [:input.input {:type      "text" :placeholder "O2 sats"
+                       :value     (get-in @v (conj kp :o2-saturations))
+                       :on-change #(swap! v assoc-in (conj kp :o2-saturations) (-> % .-target .-value))}]
         [:span.icon.is-small.is-left
          [:i.fas.fa-lungs]]]]
       [:div.field
@@ -146,11 +160,11 @@
   {:pre [(vector? kp)]}
   (let [current-time (rf/subscribe [:current-time])
         timer (reagent/atom {:start nil :status :not-running :breaths 0})
-        stop-timer #(do (let [duration (/ (- @current-time (:start @timer)) 1000) ;; milliseconds -> seconds
-                              result (* (/ (:breaths @timer) duration) 60)]
-                          (swap! v assoc-in kp (int result))
-                          (reset! timer {:start nil :status :not-running :breaths 0})))
-        ]
+        stop-timer #(let [duration (/ (- @current-time (:start @timer)) 1000) ;; milliseconds -> seconds
+                          result (* (/ (:breaths @timer) duration) 60)]
+                      (swap! v assoc-in kp (int result))
+                      (reset! timer {:start nil :status :not-running :breaths 0}))
+        start-timer #(reset! timer {:start @current-time :status :running :breaths 0})]
     (fn [value]
       (cond
         ;; timer isn't running, so show a text field and a button to start the timer
@@ -161,7 +175,7 @@
                          :on-change #(swap! v assoc-in kp (-> % .-target .-value))}]
           [:span.icon.is-small.is-left [:i.fas.fa-lungs]] (comment [:span.icon.is-small.is-right [:i.fas.fa-check]])]
          [:div.control
-          [:a.button.is-info {:on-click #(reset! timer {:start @current-time :status :running :breaths 0})} "  Start timer  "]]]
+          [:a.button.is-info {:on-click start-timer} "  Start timer  "]]]
 
         ;; timer is running, so show the countdown from 60 seconds and count the number of breaths recorded
         (= (:status @timer) :running)
@@ -177,6 +191,11 @@
   )
 
 
+
+
+
+
+
 (defn form-early-warning-score
   [save-func]
   (let [results (reagent/atom nil)]
@@ -184,24 +203,19 @@
       [:div
 
        [respiratory-rate results [:resp-rate]]
-      [oxygen-saturations results [:o2-sats]]
+       [oxygen-saturations results [:o2-sats]]
 
+       [form-textfield results [:pulse] "Pulse rate" "Beats per minute"]
+       [form-textfield results [:bp] "Blood pressure" "Write as 120/80"]
+       [form-textfield results [:temperature] "Temperature" "e.g. 37.4C"]
 
        [:p "Results: "]
-       [:p "RR: " (:resp-rate @results)]
-       [:p "o2 sats:" (get-in @results [:o2-sats :o2-saturations])]
+       [:p "RR: " (:resp-rate @results) " score: " (clin/calc-news-respiratory (:resp-rate @results))]
+       [:p "o2 sats:" (get-in @results [:o2-sats :o2-saturations]) " score: " (clin/calc-news-o2-sats-scale-1 (get-in @results [:o2-sats :o2-saturations]))]
+       [:p "pulse: " (:pulse @results) " score: " (clin/calc-news-pulse (:pulse @results))]
+       [:p "temperature: " (:temperature @results) " score: " (clin/calc-news-temperature (:temperature @results))]
 
-       [:div.field.is-horizontal
-        [:div.field-label.is-normal
-         [:label.label "Pulse rate" [:p.help "Beats per minute"]]]
-        [:div.field-body
-         [:div.field
-          [:p.control.is-expanded.has-icons-left
-           [:input.input {:type "text" :placeholder "Pulse rate"}]
-           [:span.icon.is-small.is-left
-            [:i.fas.fa-heartbeat]]]]
-
-         ]]]
+       ]
       )))
 
 (defn home-panel []
@@ -280,7 +294,6 @@
             [:div.message-body
 
              [form-early-warning-score nil]
-
 
 
 
