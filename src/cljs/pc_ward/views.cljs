@@ -113,38 +113,59 @@
            [:a.button.is-light {:on-click #(rf/dispatch [:user/logout])} "Logout"]]]]]])))
 
 
+(defn oxygen-saturations
+  "Component to record o2 saturations and air/oxygen/device, with results pushed as map to atom (v) via keypath (kp)"
+  [v kp]
+  {:pre [(vector? kp)]}
+  (fn []
+    [:div.field.is-horizontal
+     [:div.field-label.is-normal
+      [:label.label "Oxygen saturations"]]
+     [:div.field-body
+      [:div.field
+       [:p.control.is-expanded.has-icons-left
+        [:input.input {:type "text" :placeholder "O2 sats"
+                       :value (get-in @v (conj kp :o2-saturations))
+                       :on-change #(swap! v assoc-in (conj kp :o2-saturations) (-> % .-target .-value))
+                       }]
+        [:span.icon.is-small.is-left
+         [:i.fas.fa-lungs]]]]
+      [:div.field
+       [:div.control
+        [:label.radio
+         [:input {:type "radio" :name "answer"}] " On air"]
+        [:label.radio
+         [:input {:type "radio" :name "answer"}] " On oxygen"]]
+       ]]]
+    )
+  )
+
 (defn respiratory-rate
-  [value]
+  "Component to record respiratory rate, with result pushed to atom (v) using key path (kp) (a vector of keys)"
+  [v kp]
+  {:pre [(vector? kp)]}
   (let [current-time (rf/subscribe [:current-time])
         timer (reagent/atom {:start nil :status :not-running :breaths 0})
-        stop-timer #(do
-                      (let [duration (/ (- @current-time (:start @timer)) 1000) ;; milliseconds -> seconds
-                            rate (/ (:breaths @timer) duration)
-                            result (* rate 60)]
-                        (js/console.log "breaths per minute: " result)
-                        (reset! value (int result))
-                        (reset! timer {:start nil :status :not-running :breaths 0})))
+        stop-timer #(do (let [duration (/ (- @current-time (:start @timer)) 1000) ;; milliseconds -> seconds
+                              result (* (/ (:breaths @timer) duration) 60)]
+                          (swap! v assoc-in kp (int result))
+                          (reset! timer {:start nil :status :not-running :breaths 0})))
         ]
     (fn [value]
       (cond
         ;; timer isn't running, so show a text field and a button to start the timer
         (= (:status @timer) :not-running)
-        [:div.field.has-addons
-         [:label.label "Respiratory rate " [:p.help "Breaths per minute"]]
+        [:div.field.has-addons [:label.label "Respiratory rate " [:p.help "Breaths per minute"]]
          [:div.control.has-icons-left.has-icons-right
-          [:input.input {:type      " text " :placeholder " Respiratory rate "
-                         :value     @value
-                         :on-change #(reset! value (-> % .-target .-value))}]
+          [:input.input {:type      " text " :placeholder " Respiratory rate " :value (get-in @v kp)
+                         :on-change #(swap! v assoc-in kp (-> % .-target .-value))}]
           [:span.icon.is-small.is-left [:i.fas.fa-lungs]] (comment [:span.icon.is-small.is-right [:i.fas.fa-check]])]
          [:div.control
-          [:a.button.is-info {:on-click #(do
-                                           (reset! timer {:start @current-time :status :running :breaths 0})
-                                           (js/console.log "button clicked" "Current time: " @current-time " timer: " @timer))
-                              } "  Start timer  "]]]
+          [:a.button.is-info {:on-click #(reset! timer {:start @current-time :status :running :breaths 0})} "  Start timer  "]]]
+
         ;; timer is running, so show the countdown from 60 seconds and count the number of breaths recorded
         (= (:status @timer) :running)
-        [:div.field.has-addons
-         [:label.label "Respiratory rate " [:p.help "Breaths per minute"]]
+        [:div.field.has-addons [:label.label "Respiratory rate " [:p.help "Breaths per minute"]]
          [:div.control.has-icons-left.has-icons-right.is-loading
           [:input.input {:type " text " :disabled true :value (str (:breaths @timer) " breaths in " (int (/ (- @current-time (:start @timer)) 1000)) "s")}]
           [:span.icon.is-small.is-left [:i.fas.fa-lungs]] (comment [:span.icon.is-small.is-right [:i.fas.fa-check]])]
@@ -158,27 +179,17 @@
 
 (defn form-early-warning-score
   [save-func]
-  (let [rr (reagent/atom nil)]
+  (let [results (reagent/atom nil)]
     (fn [value]
       [:div
 
-       [respiratory-rate rr]
-       [:div.field.is-horizontal
-        [:div.field-label.is-normal
-         [:label.label "Oxygen saturations"]]
-        [:div.field-body
-         [:div.field
-          [:p.control.is-expanded.has-icons-left
-           [:input.input {:type "text" :placeholder "O2 sats" :value @rr}]
-           [:span.icon.is-small.is-left
-            [:i.fas.fa-lungs]]]]
-         [:div.field
-          [:div.control
-           [:label.radio
-            [:input {:type "radio" :name "answer"}] " On air"]
-           [:label.radio
-            [:input {:type "radio" :name "answer"}] " On oxygen"]]
-          ]]]
+       [respiratory-rate results [:resp-rate]]
+      [oxygen-saturations results [:o2-sats]]
+
+
+       [:p "Results: "]
+       [:p "RR: " (:resp-rate @results)]
+       [:p "o2 sats:" (get-in @results [:o2-sats :o2-saturations])]
 
        [:div.field.is-horizontal
         [:div.field-label.is-normal
