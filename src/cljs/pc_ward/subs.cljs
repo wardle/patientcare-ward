@@ -40,3 +40,7 @@
   (fn [db _]
     (:login-error db)))
 
+(re-frame/reg-sub
+  :current-time
+    (fn [db _]     ;; db is current app state. 2nd unused param is query vector
+      (:current-time db)))

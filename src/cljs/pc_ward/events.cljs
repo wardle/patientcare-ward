@@ -16,6 +16,19 @@
   (fn [_ _]
     db/default-db))
 
+(defn dispatch-timer-event
+  []
+  (let [now (js/Date.)]
+    (re-frame/dispatch [:timer now])))  ;; <-- dispatch used
+
+;; call the dispatching function every second
+(defonce do-timer (js/setInterval dispatch-timer-event 1000))
+
+(re-frame/reg-event-db                 ;; usage:  (rf/dispatch [:timer a-js-Date])
+  :timer
+  (fn [db [_ new-time]]          ;; <-- notice how we de-structure the event vector
+    (assoc db :current-time new-time)))
+
 
 (re-frame/reg-event-db
   ::set-active-panel
@@ -219,4 +232,8 @@
   :user/logout
   (fn-traced [db [_ user]]
              (js/console.log "Logging out user" user)
-             (dissoc db :authenticated-user)))
+             (-> db
+                 (dissoc :authenticated-user-token)
+                 (dissoc :authenticated-user)
+                 )
+             ))
