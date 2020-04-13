@@ -10,6 +10,24 @@
     ))
 
 
+(defonce timeouts
+         (atom {}))
+
+(re-frame/reg-fx :dispatch-debounce
+        (fn [[id event-vec n]]
+          (js/clearTimeout (@timeouts id))
+          (swap! timeouts assoc id
+                 (js/setTimeout (fn []
+                                  (re-frame/dispatch event-vec)
+                                  (swap! timeouts dissoc id))
+                                n))))
+
+(re-frame/reg-fx :stop-debounce
+        (fn [id]
+          (js/clearTimeout (@timeouts id))
+          (swap! timeouts dissoc id)))
+
+
 (re-frame/reg-event-db
   ::initialize-db
   []
@@ -19,14 +37,14 @@
 (defn dispatch-timer-event
   []
   (let [now (js/Date.)]
-    (re-frame/dispatch [:timer now])))  ;; <-- dispatch used
+    (re-frame/dispatch [:timer now])))                      ;; <-- dispatch used
 
 ;; call the dispatching function every second
 (defonce do-timer (js/setInterval dispatch-timer-event 1000))
 
-(re-frame/reg-event-db                 ;; usage:  (rf/dispatch [:timer a-js-Date])
+(re-frame/reg-event-db                                      ;; usage:  (rf/dispatch [:timer a-js-Date])
   :timer
-  (fn [db [_ new-time]]          ;; <-- notice how we de-structure the event vector
+  (fn [db [_ new-time]]                                     ;; <-- notice how we de-structure the event vector
     (assoc db :current-time new-time)))
 
 
@@ -88,6 +106,46 @@
                   :on-failure      [:user/user-login-failure]}}))
 
 
+(re-frame/reg-event-fx
+  :snomed/search-later
+  (fn [_ [_ id params]]
+    {:dispatch-debounce [id [:snomed/search id params] 200]}))
+
+
+(re-frame/reg-event-fx
+  :snomed/search
+  (fn [{db :db} [_ id {s :s is-a :is-a max-hits :max-hits}]]
+    (let [clear-results {:db (-> db
+                                 (update-in [:snomed id] dissoc :error)
+                                 (update-in [:snomed id] dissoc :results)
+                                 )}]
+      (if (clojure.string/blank? s)
+        clear-results
+        (assoc clear-results :http-xhrio {:method          :get
+                                          :uri             "http://localhost:8090/v1/snomed/search"
+                                          :timeout         5000
+                                          :format          (ajax/json-request-format)
+                                          :params          {:s            s
+                                                            :is_a         is-a
+                                                            :maximum_hits max-hits}
+                                          :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
+                                          :on-success      [:snomed/search-success id]
+                                          :on-failure      [:snomed/search-failure id]})))))
+
+(re-frame/reg-event-db
+  :snomed/search-success
+  (fn [db [_ id response]]
+    (js/console.log "search result for " id ":" (:items response))
+    (-> db
+        (update-in [:snomed id] dissoc :error)
+        (assoc-in [:snomed id :results] (:items response)))))
+
+(re-frame/reg-event-db
+  :snomed/search-failure
+  (fn [db [id response]]
+    (-> db
+        (update-in [:snomed id] dissoc :results)
+        (assoc-in [:snomed id :error] (:status-text response)))))
 
 (re-frame/reg-event-db
   :user/foreground-spinner

@@ -44,3 +44,13 @@
   :current-time
     (fn [db _]     ;; db is current app state. 2nd unused param is query vector
       (:current-time db)))
+
+(re-frame/reg-sub
+  :snomed/error
+  (fn [db _]
+    (get-in db [:snomed :error])))
+
+(re-frame/reg-sub
+  :snomed/results
+  (fn [db [_ id]]
+    (get-in db [:snomed id :results])))

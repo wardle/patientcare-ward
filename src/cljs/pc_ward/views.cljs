@@ -114,6 +114,36 @@
            [:a.button.is-light {:on-click #(rf/dispatch [:user/logout])} "Logout"]]]]]])))
 
 
+(defn snomed-autocomplete
+  [v kp name help]
+  {:pre [(vector? kp)]}
+  (let [
+        results (rf/subscribe [:snomed/results ::new-diagnosis])
+        ]
+    (fn [v kp name help]
+      [:div
+       [:div.field
+        [:label.label name]
+        [:div.control
+         [:input.input {:type       "text" :placeholder name
+                        :on-dispose #(rf/dispatch [:snomed-search ::new-diagnosis {:s ""}])
+                        :on-change  #(rf/dispatch [:snomed/search-later ::new-diagnosis {:s        (-> % .-target .-value)
+                                                                                         :is-a     64572001
+                                                                                         :max-hits 500}])}]]
+        ]
+
+       [:div.select.is-multiple
+        [:select {:multiple true}
+         {:name "0.15.1.0.1.0.0.11.3.7.502066157.1.1.3.0.RSEditToOneSnomedConceptTypeAhead.0.3.0.1.9.1" :size 8}
+
+         (doall (map-indexed (fn [index item] [:option {:value index} (:term item)]) @results))
+
+         ]
+
+        ]
+       ])))
+
+
 
 (defn form-textfield
   [v kp name help]
@@ -208,6 +238,8 @@
        [form-textfield results [:pulse] "Pulse rate" "Beats per minute"]
        [form-textfield results [:bp] "Blood pressure" "Write as 120/80"]
        [form-textfield results [:temperature] "Temperature" "e.g. 37.4C"]
+
+       [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
 
        [:p "Results: "]
        [:p "RR: " (:resp-rate @results) " score: " (clin/calc-news-respiratory (:resp-rate @results))]
