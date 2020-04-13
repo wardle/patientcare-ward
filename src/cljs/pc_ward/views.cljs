@@ -118,29 +118,38 @@
   [v kp name help]
   {:pre [(vector? kp)]}
   (let [
+        search (reagent/atom "")
         results (rf/subscribe [:snomed/results ::new-diagnosis])
-        ]
+        selected (reagent/atom [0])]                        ;; store value as vector
     (fn [v kp name help]
       [:div
        [:div.field
         [:label.label name]
         [:div.control
-         [:input.input {:type       "text" :placeholder name
-                        :on-dispose #(rf/dispatch [:snomed-search ::new-diagnosis {:s ""}])
-                        :on-change  #(rf/dispatch [:snomed/search-later ::new-diagnosis {:s        (-> % .-target .-value)
-                                                                                         :is-a     64572001
-                                                                                         :max-hits 500}])}]]
-        ]
+         [:input.input {:type      "text" :placeholder name :value @search
+                        :on-change #(do (reset! search (-> % .-target .-value))
+                                        (rf/dispatch [:snomed/search-later ::new-diagnosis {:s        (-> % .-target .-value)
+                                                                                            :is-a     64572001
+                                                                                            :max-hits 500}]))}]]]
+       ;; show results in a HTML SELECT box
+       [:div.select.is-multiple.is-fullwidth {:style {:height (str 10 "em")}}
+        [:select {:multiple true :size 4 :value @selected :on-change #(reset! selected [(-> % (.-target) (.-value))])}
+         (doall (map-indexed (fn [index item] ^{:key index} [:option {:value index} (:term item)]) @results)) ]]
 
-       [:div.select.is-multiple
-        [:select {:multiple true}
-         {:name "0.15.1.0.1.0.0.11.3.7.502066157.1.1.3.0.RSEditToOneSnomedConceptTypeAhead.0.3.0.1.9.1" :size 8}
-
-         (doall (map-indexed (fn [index item] [:option {:value index} (:term item)]) @results))
-
+       ;; show selected result
+       [:div.card
+        [:header.card-header
+         [:p.card-header-title [:p.title.is-4 (:preferred_term (nth @results (int (first @selected))))]]
+         [:a.card-header-icon {:href "#" :aria-label "more options"}
+          [:span.icon
+           [:i.fas.fa-angle-down {:aria-hidden "true"}]]]]
+        [:div.card-content
+         [:p.subtitle.is-6 (:term (nth @results (int (first @selected))))]
          ]
+        [:footer.card-footer
+         [:a.card-footer-item {:href "#"} "Save"]
+         [:a.card-footer-item {:href "#"} "Cancel"]]]
 
-        ]
        ])))
 
 
@@ -232,6 +241,9 @@
     (fn [value]
       [:div
 
+
+       [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
+
        [respiratory-rate results [:resp-rate]]
        [oxygen-saturations results [:o2-sats]]
 
@@ -239,7 +251,6 @@
        [form-textfield results [:bp] "Blood pressure" "Write as 120/80"]
        [form-textfield results [:temperature] "Temperature" "e.g. 37.4C"]
 
-       [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
 
        [:p "Results: "]
        [:p "RR: " (:resp-rate @results) " score: " (clin/calc-news-respiratory (:resp-rate @results))]
