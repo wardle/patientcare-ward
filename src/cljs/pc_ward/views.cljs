@@ -113,44 +113,80 @@
           [:div.buttons
            [:a.button.is-light {:on-click #(rf/dispatch [:user/logout])} "Logout"]]]]]])))
 
+(defn snomed-show-concept
+  [concept-id]
+  (let [active-panel (reagent/atom :active-synonyms)]       ;; outside of the function will be called once
+    (fn [concept-id]
+      (let [concept (rf/subscribe [:snomed/concept concept-id])]  ;; inside of the function will be called multiple times (on re-render)
+        [:nav.panel.is-success
+         [:p.panel-heading
+          (get-in @concept [:preferred_description :term])]
+
+         (if-not (get-in @concept [:concept :active]) [:span.tag.is-danger "Inactive"])
+
+         [:p.panel-tabs
+          [:a {:class    (if (= @active-panel :active-synonyms) "is-active" "")
+               :on-click #(reset! active-panel :active-synonyms)} "Active synonyms"]
+          [:a {:class    (if (= @active-panel :inactive-synonyms) "is-active" "")
+               :on-click #(reset! active-panel :inactive-synonyms)} "Inactive"]
+          [:a {:class    (if (= @active-panel :preferred-synonyms) "is-active" "")
+               :on-click #(reset! active-panel :preferred-synonyms)} "Preferred"]]
+
+         (if-not (nil? @concept)
+           (let [preferred-id (get-in @concept [:preferred_description :id])]
+             (doall (->> (sort-by :term (:descriptions @concept))
+                         (filter #(case @active-panel
+                                    :active-synonyms (:active %)
+                                    :inactive-synonyms (not (:active %))
+                                    :preferred-synonyms (= preferred-id (:id %))))
+                         (filter #(not= (:type_id %) "900000000000003001")) ;; exclude fully specified names
+                         (map #(vector
+                                 :p.panel-block.is-size-7 {:key (:id %)} (:term %)
+                                 (if (and (not= @active-panel :preferred-synonyms) (= preferred-id (:id %)))
+                                   " (* preferred)")))))))
+         [:div.panel-block
+          [:button.button.is-link.is-outlined.is-fullwidth "Save"]]]
+        ))))
+
+
 
 (defn snomed-autocomplete
-  [v kp name help]
+  [v kp {name   :name                                       ;; name for this, eg. diagnosis
+         common :common                                     ;; list of common concepts, if present will be shown in pop-up list
+         is-a   :is-a                                       ;; vector containing is-a constraints
+         }]
   {:pre [(vector? kp)]}
   (let [
         search (reagent/atom "")
-        results (rf/subscribe [:snomed/results ::new-diagnosis])
-        selected (reagent/atom [0])]                        ;; store value as vector
-    (fn [v kp name help]
+        selected-index (reagent/atom nil)
+        results (rf/subscribe [:snomed/results ::new-diagnosis])]
+    (fn [v kp props]
       [:div
        [:div.field
         [:label.label name]
         [:div.control
          [:input.input {:type      "text" :placeholder name :value @search
-                        :on-change #(do (reset! search (-> % .-target .-value))
-                                        (rf/dispatch [:snomed/search-later ::new-diagnosis {:s        (-> % .-target .-value)
-                                                                                            :is-a     64572001
-                                                                                            :max-hits 500}]))}]]]
-       ;; show results in a HTML SELECT box
-       [:div.select.is-multiple.is-fullwidth {:style {:height (str 10 "em")}}
-        [:select {:multiple true :size 4 :value @selected :on-change #(reset! selected [(-> % (.-target) (.-value))])}
-         (doall (map-indexed (fn [index item] ^{:key index} [:option {:value index} (:term item)]) @results)) ]]
+                        :on-change #(do
+                                      (reset! selected-index nil)
+                                      (reset! search (-> % .-target .-value))
+                                      (rf/dispatch [:snomed/search-later ::new-diagnosis {:s        (-> % .-target .-value)
+                                                                                          :is-a     64572001
+                                                                                          :max-hits 500}]))}]]]
+       [:div.field
+        [:div.select.is-multiple.is-fullwidth {:style {:height (str 10 "em")}}
+         [:select {:multiple  true :size 4
+                   :value     (vector @selected-index)
+                   :on-change #(let [val (int (-> % (.-target) (.-value)))
+                                     item (nth @results val)]
+                                 (rf/dispatch [:snomed/get-concept (:concept_id item)])
+                                 (reset! selected-index val))}
+          (doall (map-indexed (fn [index item] [:option {:key index :value index} (:term item)]) @results))
+          ]]
 
-       ;; show selected result
-       [:div.card
-        [:header.card-header
-         [:p.card-header-title [:p.title.is-4 (:preferred_term (nth @results (int (first @selected))))]]
-         [:a.card-header-icon {:href "#" :aria-label "more options"}
-          [:span.icon
-           [:i.fas.fa-angle-down {:aria-hidden "true"}]]]]
-        [:div.card-content
-         [:p.subtitle.is-6 (:term (nth @results (int (first @selected))))]
-         ]
-        [:footer.card-footer
-         [:a.card-footer-item {:href "#"} "Save"]
-         [:a.card-footer-item {:href "#"} "Cancel"]]]
+        ;; show selected result
+        (if-not (nil? @selected-index) [snomed-show-concept (:concept_id (nth @results @selected-index))])
 
-       ])))
+        ]])))
 
 
 

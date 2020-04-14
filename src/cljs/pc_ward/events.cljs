@@ -14,18 +14,18 @@
          (atom {}))
 
 (re-frame/reg-fx :dispatch-debounce
-        (fn [[id event-vec n]]
-          (js/clearTimeout (@timeouts id))
-          (swap! timeouts assoc id
-                 (js/setTimeout (fn []
-                                  (re-frame/dispatch event-vec)
-                                  (swap! timeouts dissoc id))
-                                n))))
+                 (fn [[id event-vec n]]
+                   (js/clearTimeout (@timeouts id))
+                   (swap! timeouts assoc id
+                          (js/setTimeout (fn []
+                                           (re-frame/dispatch event-vec)
+                                           (swap! timeouts dissoc id))
+                                         n))))
 
 (re-frame/reg-fx :stop-debounce
-        (fn [id]
-          (js/clearTimeout (@timeouts id))
-          (swap! timeouts dissoc id)))
+                 (fn [id]
+                   (js/clearTimeout (@timeouts id))
+                   (swap! timeouts dissoc id)))
 
 
 (re-frame/reg-event-db
@@ -107,10 +107,39 @@
 
 
 (re-frame/reg-event-fx
+  :snomed/get-concept
+  (fn [{db :db} [_ concept-id]]
+    (let [cached (get-in db [:snomed :concepts concept-id] :not-found)]
+      (if (= cached :not-found)
+        {:http-xhrio {:method          :get
+                      :uri             (str "http://localhost:8090/v1/snomed/concepts/" concept-id "/extended")
+                      :timeout         5000
+                      :format          (ajax/json-request-format)
+                      :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
+                      :on-success      [:snomed/get-concept-success concept-id]
+                      :on-failure      [:snomed/get-concept-failure concept-id]}}
+        {}))))
+
+(re-frame/reg-event-db
+  :snomed/get-concept-success
+  (fn [db [_ concept-id response]]
+    (assoc-in db [:snomed :concepts concept-id] response)
+    ))
+
+(re-frame/reg-event-db
+  :snomed/get-concept-failure
+  (fn [db [_ concept-id response]]
+    (assoc-in db [:snomed :error] (:status-text response))))
+
+(re-frame/reg-sub
+  :snomed/concept
+  (fn [db [_ concept-id]]
+    (get-in db [:snomed :concepts concept-id])))
+
+(re-frame/reg-event-fx
   :snomed/search-later
   (fn [_ [_ id params]]
     {:dispatch-debounce [id [:snomed/search id params] 200]}))
-
 
 (re-frame/reg-event-fx
   :snomed/search
@@ -135,14 +164,13 @@
 (re-frame/reg-event-db
   :snomed/search-success
   (fn [db [_ id response]]
-    (js/console.log "search result for " id ":" (:items response))
     (-> db
         (update-in [:snomed id] dissoc :error)
         (assoc-in [:snomed id :results] (:items response)))))
 
 (re-frame/reg-event-db
   :snomed/search-failure
-  (fn [db [id response]]
+  (fn [db [_ id response]]
     (-> db
         (update-in [:snomed id] dissoc :results)
         (assoc-in [:snomed id :error] (:status-text response)))))
