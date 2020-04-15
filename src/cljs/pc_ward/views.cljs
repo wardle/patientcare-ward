@@ -113,16 +113,20 @@
           [:div.buttons
            [:a.button.is-light {:on-click #(rf/dispatch [:user/logout])} "Logout"]]]]]])))
 
+
 (defn snomed-show-concept
+  "Display read-only information about a concept in a panel"
   [concept-id]
   (let [active-panel (reagent/atom :active-synonyms)]       ;; outside of the function will be called once
     (fn [concept-id]
-      (let [concept (rf/subscribe [:snomed/concept concept-id])] ;; inside of the function will be called multiple times (on re-render)
+      (let [concept (rf/subscribe [:snomed/concept concept-id])
+            loading (nil? @concept)]                        ;; inside of the function will be called multiple times (on re-render)
         [:nav.panel.is-success
          [:p.panel-heading
-          (get-in @concept [:preferred_description :term])]
-
-         (if-not (get-in @concept [:concept :active]) [:span.tag.is-danger "Inactive"])
+          (if loading
+            "Loading..."
+            [:span (get-in @concept [:preferred_description :term])
+             (if-not (get-in @concept [:concept :active]) [:span.tag.is-danger "Inactive"])])]
 
          [:p.panel-tabs
           [:a {:class    (if (= @active-panel :active-synonyms) "is-active" "")
@@ -132,7 +136,8 @@
           [:a {:class    (if (= @active-panel :preferred-synonyms) "is-active" "")
                :on-click #(reset! active-panel :preferred-synonyms)} "Preferred"]]
 
-         (if-not (nil? @concept)
+         (if loading
+           [:p.panel-block.is-size-7 "Loading..."]
            (let [preferred-id (get-in @concept [:preferred_description :id])]
              (doall (->> (sort-by :term (:descriptions @concept))
                          (filter #(case @active-panel
@@ -150,8 +155,6 @@
           [:button.button.is-link.is-outlined.is-fullwidth "Save"]]]
         ))))
 
-
-
 (defn snomed-autocomplete
   [v kp {name   :name                                       ;; name for this, eg. diagnosis
          common :common                                     ;; list of common concepts, if present will be shown in pop-up list
@@ -163,13 +166,16 @@
         selected-index (reagent/atom nil)
         results (rf/subscribe [:snomed/results ::new-diagnosis])]
     (fn [v kp props]
+      (if (and (= 0 @selected-index) (> (count @results) 0))       ;; handle special case of typing in search to ensure we start fetching first result
+        (do
+          (rf/dispatch [:snomed/get-concept (:concept_id (first @results))])))
       [:div
        [:div.field
         [:label.label name]
         [:div.control
          [:input.input {:type      "text" :placeholder name :value @search
                         :on-change #(do
-                                      (reset! selected-index nil)
+                                      (reset! selected-index 0)
                                       (reset! search (-> % .-target .-value))
                                       (rf/dispatch [:snomed/search-later ::new-diagnosis {:s        (-> % .-target .-value)
                                                                                           :is-a     [370159000 64572001]
@@ -178,6 +184,9 @@
         [:div.select.is-multiple.is-fullwidth {:style {:height (str 10 "em")}}
          [:select {:multiple  true :size 4
                    :value     (vector @selected-index)
+                   :on-set    #(let [val (int (-> % (.-target) (.-value)))
+                                     item (nth @results val)]
+                                 (rf/dispatch [:snomed/get-concept (:concept_id item)]))
                    :on-change #(let [val (int (-> % (.-target) (.-value)))
                                      item (nth @results val)]
                                  (rf/dispatch [:snomed/get-concept (:concept_id item)])
@@ -185,8 +194,9 @@
           (doall (map-indexed (fn [index item] [:option {:key index :value index} (:term item)]) @results))
           ]]
 
-        ;; show selected result
-        (if-not (nil? @selected-index) [snomed-show-concept (:concept_id (nth @results @selected-index))])
+        ;; if we have a selected result, show it
+        (if (and (> (count @results) 0) (not (nil? @selected-index)))
+          [snomed-show-concept (:concept_id (nth @results @selected-index))])
 
         ]])))
 
@@ -431,7 +441,7 @@
       (if (nil? @authenticated-user)
         [login-panel]
         [show-panel @active-panel]
- ))))
+        ))))
 
 
 (comment
