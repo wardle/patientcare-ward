@@ -117,7 +117,7 @@
   [concept-id]
   (let [active-panel (reagent/atom :active-synonyms)]       ;; outside of the function will be called once
     (fn [concept-id]
-      (let [concept (rf/subscribe [:snomed/concept concept-id])]  ;; inside of the function will be called multiple times (on re-render)
+      (let [concept (rf/subscribe [:snomed/concept concept-id])] ;; inside of the function will be called multiple times (on re-render)
         [:nav.panel.is-success
          [:p.panel-heading
           (get-in @concept [:preferred_description :term])]
@@ -141,9 +141,11 @@
                                     :preferred-synonyms (= preferred-id (:id %))))
                          (filter #(not= (:type_id %) "900000000000003001")) ;; exclude fully specified names
                          (map #(vector
-                                 :p.panel-block.is-size-7 {:key (:id %)} (:term %)
+                                 :p.panel-block.is-size-7 {:key (:id %)}
                                  (if (and (not= @active-panel :preferred-synonyms) (= preferred-id (:id %)))
-                                   " (* preferred)")))))))
+                                   [:strong (:term %)]
+                                   (:term %))
+                                 ))))))
          [:div.panel-block
           [:button.button.is-link.is-outlined.is-fullwidth "Save"]]]
         ))))
@@ -170,7 +172,7 @@
                                       (reset! selected-index nil)
                                       (reset! search (-> % .-target .-value))
                                       (rf/dispatch [:snomed/search-later ::new-diagnosis {:s        (-> % .-target .-value)
-                                                                                          :is-a     64572001
+                                                                                          :is-a     [370159000 64572001]
                                                                                           :max-hits 500}]))}]]]
        [:div.field
         [:div.select.is-multiple.is-fullwidth {:style {:height (str 10 "em")}}
@@ -280,20 +282,39 @@
 
        [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
 
-       [respiratory-rate results [:resp-rate]]
-       [oxygen-saturations results [:o2-sats]]
 
-       [form-textfield results [:pulse] "Pulse rate" "Beats per minute"]
-       [form-textfield results [:bp] "Blood pressure" "Write as 120/80"]
-       [form-textfield results [:temperature] "Temperature" "e.g. 37.4C"]
+       (comment
+         [respiratory-rate results [:resp-rate]]
+         [oxygen-saturations results [:o2-sats]]
+
+         [form-textfield results [:pulse] "Pulse rate" "Beats per minute"]
+         [form-textfield results [:bp] "Blood pressure" "Write as 120/80"]
+         [form-textfield results [:temperature] "Temperature" "e.g. 37.4C"]
+
+         [:div.field.is-horizontal
+          [:div.field-label.is-normal
+           [:label.label "Blood pressure"]]
+          [:div.field-body
+           [:div.field
+            [:p.control.is-expanded.has-icons-left
+             [:input.input {:type "text" :placeholder "Systolic"}]
+             [:span.icon.is-small.is-left
+              [:i.fas.fa-heart]]]]
+           [:div.field
+            [:p.control.is-expanded.has-icons-left.has-icons-right
+             [:input.input.is-success {:type "text" :placeholder "Diastolic"}]
+             [:span.icon.is-small.is-left
+              [:i.fas.fa-heart]]
+             [:span.icon.is-small.is-right
+              [:i.fas.fa-check]]]]]]
 
 
-       [:p "Results: "]
-       [:p "RR: " (:resp-rate @results) " score: " (clin/calc-news-respiratory (:resp-rate @results))]
-       [:p "o2 sats:" (get-in @results [:o2-sats :o2-saturations]) " score: " (clin/calc-news-o2-sats-scale-1 (get-in @results [:o2-sats :o2-saturations]))]
-       [:p "pulse: " (:pulse @results) " score: " (clin/calc-news-pulse (:pulse @results))]
-       [:p "temperature: " (:temperature @results) " score: " (clin/calc-news-temperature (:temperature @results))]
-
+         [:p "Results: "]
+         [:p "RR: " (:resp-rate @results) " score: " (clin/calc-news-respiratory (:resp-rate @results))]
+         [:p "o2 sats:" (get-in @results [:o2-sats :o2-saturations]) " score: " (clin/calc-news-o2-sats-scale-1 (get-in @results [:o2-sats :o2-saturations]))]
+         [:p "pulse: " (:pulse @results) " score: " (clin/calc-news-pulse (:pulse @results))]
+         [:p "temperature: " (:temperature @results) " score: " (clin/calc-news-temperature (:temperature @results))]
+         )
        ]
       )))
 
@@ -359,39 +380,22 @@
            ]
           [:div.column
 
-           [:article.message.is-warning
-            [:div.message-header
-             [:h2 "Welcome to PatientCare: Ward"]]
-            [:div.message-body
-             [:p "This an inpatient ward application, designed in response to the SARS-CoV-2 global pandemic. "]
-             [:p "It is designed to support inpatient patient management, primarily via the recording and
+           (comment
+             [:article.message.is-warning
+              [:div.message-header
+               [:h2 "Welcome to PatientCare: Ward"]]
+              [:div.message-body
+               [:p "This an inpatient ward application, designed in response to the SARS-CoV-2 global pandemic. "]
+               [:p "It is designed to support inpatient patient management, primarily via the recording and
            presentation of electronic observations, calculation of escalation scores and provision of checklists"]
-             ]]
-
+               ]]
+             )
            [:article-message.is-danger
-            [:div.message-header [:p "Observations"]]
+            [:div.message-header [:p "Add diagnosis"]]
             [:div.message-body
 
              [form-early-warning-score nil]
 
-
-
-             [:div.field.is-horizontal
-              [:div.field-label.is-normal
-               [:label.label "Blood pressure"]]
-              [:div.field-body
-               [:div.field
-                [:p.control.is-expanded.has-icons-left
-                 [:input.input {:type "text" :placeholder "Systolic"}]
-                 [:span.icon.is-small.is-left
-                  [:i.fas.fa-heart]]]]
-               [:div.field
-                [:p.control.is-expanded.has-icons-left.has-icons-right
-                 [:input.input.is-success {:type "text" :placeholder "Diastolic"}]
-                 [:span.icon.is-small.is-left
-                  [:i.fas.fa-heart]]
-                 [:span.icon.is-small.is-right
-                  [:i.fas.fa-check]]]]]]
              ]]]
           ]
          ]
@@ -426,7 +430,8 @@
     (fn []
       (if (nil? @authenticated-user)
         [login-panel]
-        [show-panel @active-panel]))))
+        [show-panel @active-panel]
+ ))))
 
 
 (comment
