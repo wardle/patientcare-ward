@@ -119,8 +119,9 @@
   [concept-id]
   (let [active-panel (reagent/atom :active-synonyms)]       ;; outside of the function will be called once
     (fn [concept-id]
-      (let [concept (rf/subscribe [:snomed/concept concept-id])
-            loading (nil? @concept)]                        ;; inside of the function will be called multiple times (on re-render)
+      (let [concept (rf/subscribe [:snomed/concept concept-id]) ;; inside of the function will be called multiple times (on re-render)
+            loading (nil? @concept)
+            has-inactive (some #(not %) (map #(:active %)  (:descriptions @concept)))]
         [:nav.panel.is-success
          [:p.panel-heading
           (if loading
@@ -128,11 +129,12 @@
             [:span (get-in @concept [:preferred_description :term])
              (if-not (get-in @concept [:concept :active]) [:span.tag.is-danger "Inactive"])])]
 
+         (if (and (not has-inactive) (= @active-panel :inactive-synonyms)) (reset! active-panel :active-synonyms))
          [:p.panel-tabs
           [:a {:class    (if (= @active-panel :active-synonyms) "is-active" "")
                :on-click #(reset! active-panel :active-synonyms)} "Active synonyms"]
-          [:a {:class    (if (= @active-panel :inactive-synonyms) "is-active" "")
-               :on-click #(reset! active-panel :inactive-synonyms)} "Inactive"]
+          (if has-inactive [:a {:class    (if (= @active-panel :inactive-synonyms) "is-active" "")
+                                :on-click #(reset! active-panel :inactive-synonyms)} "Inactive"])
           [:a {:class    (if (= @active-panel :preferred-synonyms) "is-active" "")
                :on-click #(reset! active-panel :preferred-synonyms)} "Preferred"]]
 
