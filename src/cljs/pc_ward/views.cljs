@@ -166,7 +166,7 @@
         selected-index (reagent/atom nil)
         results (rf/subscribe [:snomed/results ::new-diagnosis])]
     (fn [v kp props]
-      (if (and (= 0 @selected-index) (> (count @results) 0))       ;; handle special case of typing in search to ensure we start fetching first result
+      (if (and (= 0 @selected-index) (> (count @results) 0)) ;; handle special case of typing in search to ensure we start fetching first result
         (do
           (rf/dispatch [:snomed/get-concept (:concept_id (first @results))])))
       [:div
