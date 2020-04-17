@@ -9,8 +9,10 @@
     [day8.re-frame.tracing :refer-macros [fn-traced]]
     ))
 
-
-(defonce timeouts
+(def concierge-server-address "http://saturn.local:8080")
+(def terminology-server-address "http://saturn.local:8090")
+(
+  defonce timeouts
          (atom {}))
 
 (re-frame/reg-fx :dispatch-debounce
@@ -90,7 +92,7 @@
   (fn [{db :db} [_ namespace username password]]
     (js/console.log "doing login " username)
     {:http-xhrio {:method          :post
-                  :uri             "http://localhost:8080/v1/login"
+                  :uri             (str concierge-server-address "/v1/login")
                   :timeout         5000
                   :format          (ajax/json-request-format)
                   :headers         {:Authorization (str "Bearer " (:concierge-service-token db))}
@@ -112,7 +114,7 @@
     (let [cached (get-in db [:snomed :concepts concept-id] :not-found)]
       (if (= cached :not-found)
         {:http-xhrio {:method          :get
-                      :uri             (str "http://localhost:8090/v1/snomed/concepts/" concept-id "/extended")
+                      :uri             (str terminology-server-address "/v1/snomed/concepts/" concept-id "/extended")
                       :timeout         5000
                       :format          (ajax/json-request-format)
                       :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
@@ -151,7 +153,7 @@
       (if (clojure.string/blank? s)
         clear-results
         (assoc clear-results :http-xhrio {:method          :get
-                                          :uri             "http://localhost:8090/v1/snomed/search"
+                                          :uri             (str terminology-server-address "/v1/snomed/search")
                                           :timeout         5000
                                           :format          (ajax/json-request-format)
                                           :params          {:s            s
@@ -217,7 +219,7 @@
   :concierge/resolve-identifier
   (fn [{db :db} [_ system value on-success on-failure]]
     {:http-xhrio {:method          :get
-                  :uri             (str "http://localhost:8080/v1/identifier/" value)
+                  :uri             (str concierge-server-address "/v1/identifier/" value)
                   :timeout         5000
                   :format          (ajax/json-request-format)
                   :headers         {:Authorization (str "Bearer " (:authenticated-user-token db))}
@@ -235,7 +237,7 @@
   [db next-event]
   {:db         (assoc db :show-background-spinner true)     ;; causes the twirly-waiting-dialog to show??
    :http-xhrio {:method          :post
-                :uri             "http://localhost:8080/v1/login"
+                :uri             (str concierge-server-address "/v1/login")
                 :timeout         5000                       ;; optional see API docs
                 :format          (ajax/json-request-format)
                 :params          {
@@ -253,7 +255,7 @@
   [db next-event]
   {:db         (assoc db :show-background-spinner true)     ;; causes the twirly-waiting-dialog to show??
    :http-xhrio {:method          :get
-                :uri             "http://localhost:8080/v1/refresh"
+                :uri             (str concierge-server-address "/v1/refresh")
                 :headers         {:Authorization (str "Bearer " (:concierge-service-token db))}
                 :timeout         5000                       ;; optional see API docs
                 :format          (ajax/json-request-format)
