@@ -5,6 +5,9 @@
     [reagent.core :as reagent]
     [cljs-time.core :as time-core]
     [cljs-time.format :as time-format]
+    [cljs-time.predicates]
+    [cljs-time.extend]                                      ;; this import is needed so that equality for date/time works properly....
+
     [pc-ward.subs :as subs]
     [pc-ward.clinical :as clin]
     ))
@@ -292,35 +295,29 @@
 (def news-colour-abcde "#7487B6")
 
 
-(def rr-data [
-              {:date-time (time-core/date-time 2020 4 9 9 3 27) :respiratory-rate 12}
+(def news-data [
+                {:date-time      (time-core/date-time 2020 4 9 9 3 27) :respiratory-rate 12 :pulse-rate 110
+                 :blood-pressure [138 82]}
 
-              {:date-time (time-core/date-time 2020 4 12 9 3 27) :respiratory-rate 10}
+                {:date-time (time-core/date-time 2020 4 12 9 3 27) :respiratory-rate 10 :pulse-rate 82 :temperature 39.5}
 
-              {:date-time (time-core/date-time 2020 4 14 9 3 27) :respiratory-rate 22}
-              {:date-time (time-core/date-time 2020 4 14 17 3 27) :respiratory-rate 22}
-              {:date-time (time-core/date-time 2020 4 15 10 2 45) :respiratory-rate 18}
-              {:date-time (time-core/date-time 2020 4 17 10 2 45) :respiratory-rate 12}
-              {:date-time (time-core/date-time 2020 4 18 7 2 45) :respiratory-rate 30}
-              {:date-time (time-core/date-time 2020 4 18 9 2 45) :respiratory-rate 28}
-              {:date-time (time-core/date-time 2020 4 18 12 2 45) :respiratory-rate 23}
-              {:date-time (time-core/date-time 2020 4 18 19 2 45) :respiratory-rate 8}
-              {:date-time (time-core/date-time 2020 4 21 22 2 45) :respiratory-rate 14}
-              {:date-time (time-core/date-time 2020 4 22 10 2 45) :respiratory-rate 12}
-              {:date-time (time-core/date-time 2020 4 23 9 2 45) :respiratory-rate 22}
-              {:date-time (time-core/date-time 2020 4 30 11 2 45) :respiratory-rate 12}
-              {:date-time (time-core/date-time 2020 5 7 11 2 45) :respiratory-rate 12}
+                {:date-time (time-core/date-time 2020 4 14 9 3 27) :respiratory-rate 22, :spO2 94 :consciousness :clin/alert}
+                {:date-time (time-core/date-time 2020 4 14 17 3 27) :respiratory-rate 22 :spO2 98 :conscioussness :clin/alert}
+                {:date-time (time-core/date-time 2020 4 15 10 2 45) :respiratory-rate 18 :pulse-rate 85}
+                {:date-time (time-core/date-time 2020 4 17 10 2 45) :respiratory-rate 12 :spO2 97}
+                {:date-time (time-core/date-time 2020 4 18 7 2 45) :respiratory-rate 30}
+                {:date-time (time-core/date-time 2020 4 18 9 2 45) :respiratory-rate 28 :pulse-rate 90}
+                {:date-time (time-core/date-time 2020 4 18 12 2 45) :respiratory-rate 23 :pulse-rate 110}
+                {:date-time (time-core/date-time 2020 4 18 19 2 45) :respiratory-rate 8 :consciousness :clin/alert}
+                {:date-time (time-core/date-time 2020 4 8 22 2 45) :respiratory-rate 14 :pulse-rate 120 :spO2 92}
+                {:date-time (time-core/date-time 2020 4 8 10 2 45) :respiratory-rate 12 :pulse-rate 140}
+                {:date-time (time-core/date-time 2020 4 7 9 2 45) :respiratory-rate 22 :pulse-rate 90 :spO2 88 :consciousness :clin/confused}
+                {:date-time (time-core/date-time 2020 4 6 11 2 45) :respiratory-rate 12}
+                {:date-time (time-core/date-time 2020 4 5 11 2 45) :respiratory-rate 12 :temperature 37.2}
+                {:date-time (time-core/date-time 2020 4 4 11 2 45) :respiratory-rate 12 :consciousness :clin/unresponsive}
+                {:date-time (time-core/date-time 2020 4 19 9 2 45) :respiratory-rate 12 :consciousness :clin/alert :pulse-rate 95 :temperature 37.2}
 
-              ])
-
-(def respiratory-rate-ranges
-  [[25 nil]
-   [21 24]
-   [18 20]
-   [15 17]
-   [12 14]
-   [9 11]
-   [nil 8]])
+                ])
 
 (defn in-range?
   "Is the number (n) within the range defined, inclusive, handling special case of missing start or end"
@@ -335,19 +332,148 @@
         (nil? start) (str "   ≤ " end)
         :else (str start " - " end)))
 
-(defn respiratory-rate-labels
-  "Generate SVG labels for respiratory rate categories"
-  [start-y]
-  (->> respiratory-rate-ranges
-       (map-indexed (fn [index item]
-                      (vector :text {:key item :x 44 :y (+ start-y 4 (* index 5)) :fill "black" :font-size 4 :text-anchor "middle"}
-                              (range-to-label item))))))
+;; this is the default categoriser
+(defn index-by-numeric-range
+  "Calculates an 'index' for a category by taking a numeric value and identifying the range from a vector of vectors, containing ranges."
+  [v ranges]
+  (first (keep-indexed (fn [index item] (if (in-range? v (nth item 0) (nth item 1)) index nil)) ranges)))
 
-(defn calculate-respiratory-rate-category
-  "Calculate the category for a given respiratory rate - returning index."
-  [rr]
-  (first (keep-indexed (fn [index item] (if (in-range? rr (nth item 0) (nth item 1)) index nil)) respiratory-rate-ranges)))
+(defn index-by-category
+  "Calculates an 'index' for a category based on simple equivalence"
+  [v categories]
+  (first (keep-indexed (fn [index item] (if (= v item) index nil)) categories))
+  )
 
+(defn draw-labels
+  "Generate SVG labels for categories"
+  [x start-y categories]
+  (map-indexed (fn [index item]
+                 (vector :text {:key item :x x :y (+ start-y 4 (* index 5)) :fill "black" :font-size 4 :text-anchor "middle"}
+                         (cond
+                           (vector? item) (range-to-label item) ;; turn a vector into a label
+                           (keyword? item) (name item)
+                           (string? item) item
+                           )
+                         )) categories))
+
+(defn draw-chart-axes
+  "Generates an SVG chart"
+  [y plot-width {:keys [heading title subtitle categories labels scores indexed-by]}]
+  (let [n-categories (count categories)
+        total-height (* 5 n-categories)
+        titles-height (+ 8 2 4 2 3 4)
+        hy (+ y (- (/ total-height 2) (/ titles-height 2)))
+        ]
+    [:<>
+     [:rect {:x 0 :y (+ y 0) :width 32 :height total-height :fill news-colour-dark-blue}]
+     [:text {:x 16 :y (+ hy 10) :fill news-colour-abcde :font-size "10" :text-anchor "middle"} heading]
+     [:text {:x 16 :y (+ hy 15) :fill "white" :font-size "4" :font-weight "bold" :text-anchor "middle"} title]
+     [:text {:x 16 :y (+ hy 18) :fill "white" :font-size "3" :text-anchor "middle"} subtitle]
+     (draw-labels 44 y (if (nil? labels) categories labels))
+
+     (for [i (range n-categories)]
+       [:<>
+        [:rect {:x 32 :y (+ y (* i 5)) :width 24 :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
+        [:rect {:x 56 :y (+ y (* i 5)) :width plot-width :height "5" :fill (str "url(#grid-score-" (nth scores i) ")")}]
+        ]
+       )
+     ]))
+
+;; TODO: add support for other scales
+(defn calculate-x-for-scale
+  "Calculate the (x) for a date in the given scale"
+  [start-date date-time scale]
+  (case scale
+    :day (* 7 (time-core/in-days (time-core/interval start-date date-time))))
+  )
+
+;; TODO: add support for other scales
+(defn calculate-end-date-for-scale
+  "Calculate the plot width for a given scale"
+  [start-date number-boxes scale]
+  (case scale
+    :day (time-core/plus start-date (time-core/days number-boxes)))) ;; each box is a day.
+
+
+(defn plot-results
+  "Plots the results for a chart; designed to be used in conjunction with draw-chart to draw the scales/grid"
+  [start-y start-date plot-width scale chart data value-key]
+  (let [end-date (calculate-end-date-for-scale start-date plot-width scale)
+        sorted-data (->> data
+                         (filter #(and (time-core/after? (:date-time %1) start-date) (time-core/before? (:date-time %1) end-date)))
+                         (filter #(not (nil? (get %1 value-key))))
+                         (sort-by :date-time #(time-core/before? %1 %2)))]
+
+    [:<>
+     (doall (map #(let [x (+ 56 (calculate-x-for-scale start-date (:date-time %) scale))
+                        y (+ 2.5 (* 5 ((:indexed-by chart) (get % value-key) (:categories chart))))]
+                    (vector
+                      :circle {:cx (+ 3.5 x) :cy (+ start-y y) :r "0.2" :stroke "black" :fill "black" :key (:date-time %)})
+                    ) sorted-data))
+     [:polyline {:points (doall (flatten (map #(
+                                                 let [x (+ 56 (calculate-x-for-scale start-date (:date-time %) scale))
+                                                      y (+ 2.5 (* 5 ((:indexed-by chart) (get % value-key) (:categories chart))))]
+                                                 (vector (+ 3.5 x) (+ start-y y))
+                                                 ) sorted-data)))
+                 :fill   "none" :stroke "black" :stroke-width 0.2 :stroke-dasharray "1 1"
+                 }]]))
+
+
+
+
+
+;; news-charts defines our charts, their headings, the categories and the scores
+(def news-charts
+  {:respiratory-rate {:heading    "A+B"
+                      :title      "Respirations"
+                      :subtitle   "Breaths/min"
+                      :categories [[25 nil] [21 24] [18 20] [15 17] [12 14] [9 11] [nil 8]]
+                      :scores     [3 2 0 0 0 1 3]
+                      :indexed-by index-by-numeric-range
+                      }
+   :sp02-scale-1     {:heading    "A+B"
+                      :title      "SpO2 scale 1"
+                      :subtitle   "Oxygen sats (%)"
+                      :categories [[96 nil] [94 95] [92 93] [nil 91]]
+                      :scores     [0 1 2 3]
+                      :indexed-by index-by-numeric-range
+                      }
+   :air-or-oxygen    {
+                      :heading    ""
+                      :title      "Air or oxygen"
+                      :categories [:air :oxygen :device]
+                      :labels     ["Air" "O2 L/min" "Device"]
+                      :scores     [0 2 0]
+                      }
+
+   :blood-pressure   {:heading    "C"
+                      :title      "Blood pressure"
+                      :subtitle   "mmHg"
+                      :categories [[220 nil] [201 219] [181 200] [161 180] [141 160] [121 140] [111 120] [101 110]
+                                   [91 100] [81 90] [71 80] [61 70] [51 60] [nil 50]]
+                      :scores     [3 0 0 0 0 0 0 1 2 3 3 3 3 3]
+                      :indexed-by index-by-numeric-range
+                      }
+   :pulse            {:heading    "C"
+                      :title      "Pulse"
+                      :subtitle   "Beats/min"
+                      :categories [[131 nil] [121 130] [111 120] [101 110] [91 100] [81 90] [71 80]
+                                   [61 70] [51 60] [41 50] [31 40] [nil 30]]
+                      :scores     [3 2 2 1 1 0 0 0 0 1 3 3]
+                      :indexed-by index-by-numeric-range}
+   :consciousness    {:heading    "D"
+                      :title      "Consciousness"
+                      :categories [:clin/alert :clin/confused :clin/voice :clin/pain :clin/unresponsive]
+                      :labels     ["A" "Confused" "V" "P" "U"]
+                      :scores     [0 3 3 3 3]
+                      :indexed-by index-by-category}
+   :temperature      {:heading    "E"
+                      :title      "Temperature"
+                      :subtitle   "ºC"
+                      :categories [[39.1 nil] [38.1 39.0] [37.1 38.0] [36.1 37.0] [35.1 36.0] [nil 35.0]]
+                      :scores     [2 1 0 0 1 3]
+                      :indexed-by index-by-numeric-range}
+   })
 
 
 (defn test-drawing [start-date]
@@ -359,105 +485,97 @@
         left-column-width (+ left-column-panel-width left-column-label-width)
         width (* width-in-boxes box-width)
         dt-start-y 0
-        rr-start-y 15
+        rr-start-y 20
         end-date (time-core/plus start-date (time-core/days width-in-boxes))
         scale :days                                         ;; :12-hourly :6-hourly :4-hourly :hourly       ;; could offer to switch between
         calculate-x-for-days (fn [start-date date] (+ left-column-width (* 7 (time-core/in-days (time-core/interval start-date date)))))
         custom-formatter (time-format/formatter "dd MMM yyyy")
-        day-formatter (time-format/formatter "dd")
+        day-week-formatter (time-format/formatter "E")
+        day-month-formatter (time-format/formatter "dd")
         month-formatter (time-format/formatter "MM")
+        now (time-core/now)
         dates (->> (range 0 width-in-boxes)                 ;; each box represents another day
                    (map #(time-core/plus start-date (time-core/days %)))
-                   (map #(vector (time-format/unparse day-formatter %) (time-format/unparse month-formatter %))))
-        sorted-rr-data (->> rr-data
-                            (filter #(and (time-core/after? (:date-time %1) start-date) (time-core/before? (:date-time %1) end-date)))
-                            (sort-by :date-time #(time-core/before? %1 %2))
-                            )
+                   (map #(hash-map :day-of-week (time-format/unparse day-week-formatter %)
+                                   :day-of-month (time-format/unparse day-month-formatter %)
+                                   :month (time-format/unparse month-formatter %)
+                                   :is-today (cljs-time.predicates/same-date? % now))))
         ]
 
     [:svg {:width "100%" :viewBox "0 0 255 391" :xmlns "http://www.w3.org/2000/svg"}
 
      [:defs
       [:pattern#grid-score-3 {:width "7" :height "5" :patternUnits "userSpaceOnUse"}
-       [:rect {:width "7" :height "5" :fill news-colour-score-3}]
-       [:path {:d "M 100 0 L 0 0 0 100" :fill "none" :stroke "black" :stroke-width "0.5"}]]
+       [:rect {:width 7 :height 5 :fill news-colour-score-3 :stroke "black" :stroke-width 0.1}]]
       [:pattern#grid-score-2 {:width "7" :height "5" :patternUnits "userSpaceOnUse"}
-       [:rect {:width "7" :height "5" :fill news-colour-score-2}]
-       [:path {:d "M 100 0 L 0 0 0 100" :fill "none" :stroke "black" :stroke-width "0.5"}]]
+       [:rect {:width 7 :height 5 :fill news-colour-score-2 :stroke "black" :stroke-width 0.1}]]
       [:pattern#grid-score-1 {:width "7" :height "5" :patternUnits "userSpaceOnUse"}
-       [:rect {:width "7" :height "5" :fill news-colour-score-1}]
-       [:path {:d "M 100 0 L 0 0 0 100" :fill "none" :stroke "black" :stroke-width "0.5"}]]
+       [:rect {:width 7 :height 5 :fill news-colour-score-1 :stroke "black" :stroke-width 0.1}]]
       [:pattern#grid-score-0 {:width "7" :height "5" :patternUnits "userSpaceOnUse"}
-       [:rect {:width "7" :height "5" :fill "none"}]
-       [:path {:d "M 100 0 L 0 0 0 100" :fill "none" :stroke "black" :stroke-width "0.5"}]]
-      [:pattern#grid-score-0-tall {:width "7" :height "10" :patternUnits "userSpaceOnUse"}
-       [:rect {:width "7" :height "10" :fill "none"}]
-       [:path {:d "M 100 0 L 0 0 0 100" :fill "none" :stroke "black" :stroke-width "0.5"}]]
+       [:rect {:width 7 :height 5 :fill "white" :stroke "black" :stroke-width 0.1}]]
+
       ]
 
      ;; date / time
-     [:rect {:x 0 :y (+ dt-start-y 0) :width left-column-panel-width :height 10 :stroke "black" :fill "none" :stroke-width 0.1}]
+     [:rect {:x 0 :y (+ dt-start-y 0) :width left-column-panel-width :height 15 :stroke "black" :fill "none" :stroke-width 0.1}]
      [:text {:x 5 :y (+ dt-start-y 6) :fill "black" :font-size 4} (time-format/unparse custom-formatter start-date)]
      [:rect {:x left-column-panel-width :y (+ dt-start-y 0) :width left-column-label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
      [:rect {:x left-column-panel-width :y (+ dt-start-y 5) :width left-column-label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
-     [:text {:x "40" :y (+ dt-start-y 4) :fill "black" :font-size "4"} "Date"]
-     [:text {:x "40" :y (+ dt-start-y 9) :fill "black" :font-size "4"} "Month"]
-     [:rect {:x left-column-width :y (+ dt-start-y 0) :width width :height "10" :fill "url(#grid-score-0"}]
+     [:rect {:x left-column-panel-width :y (+ dt-start-y 10) :width left-column-label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
+     [:text {:x (+ left-column-panel-width (/ left-column-label-width 2)) :y (+ dt-start-y 4) :fill "black" :font-size "4" :text-anchor "middle"} "Day"]
+     [:text {:x (+ left-column-panel-width (/ left-column-label-width 2)) :y (+ dt-start-y 9) :fill "black" :font-size "4" :text-anchor "middle"} "Date"]
+     [:text {:x (+ left-column-panel-width (/ left-column-label-width 2)) :y (+ dt-start-y 14) :fill "black" :font-size "4" :text-anchor "middle"} "Month"]
+     [:rect {:x left-column-width :y (+ dt-start-y 0) :width width :height "15" :fill "url(#grid-score-0"}]
+     ;; write out days of week
      (doall (map-indexed (fn [index item]
-                           [:text {:x (+ left-column-width 2 (* index 7)) :y (+ dt-start-y 4) :fill "black" :font-size "3" :key item} (nth item 0)]
+                           (if (:is-today item)
+                             [:rect {:x      (+ left-column-width (* index 7))
+                                     :y      (+ dt-start-y 0)
+                                     :width  7
+                                     :height 15             ;;
+                                     :stroke "black" :stroke-width 0.5
+                                     :fill   "#ffeeee"
+                                     ;;:fill "none"
+                                     }])
                            ) dates))
+
      (doall (map-indexed (fn [index item]
-                           [:text {:x (+ left-column-width 2 (* index 7)) :y (+ dt-start-y 9) :fill "black" :font-size "3" :key item} (nth item 1)]) dates))
+                           [:text {:x           (+ left-column-width 3.5 (* index 7))
+                                   :y           (+ dt-start-y 4) :font-size 3
+                                   :key         (str "dw-" item) :text-anchor "middle"
+                                   :font-weight (if (:is-today item) "bold" "normal")
+                                   } (take 2 (:day-of-week item))]) dates))
+
+     ;; write out days of month
+     (doall (map-indexed (fn [index item]
+                           [:text {:x    (+ left-column-width 3.5 (* index 7))
+                                   :y    (+ dt-start-y 9)
+                                   :fill "black" :font-size "3" :key (str "dm-" item) :text-anchor "middle"} (:day-of-month item)]) dates))
+     ;; write out month
+     (doall (map-indexed (fn [index item]
+                           [:text {:x    (+ left-column-width 3.5 (* index 7))
+                                   :y    (+ dt-start-y 14)
+                                   :fill "black" :font-size "3" :key (str "m-" item) :text-anchor "middle"} (:month item)]) dates))
 
 
-     ;; respiratory rate  - 5 rows
-     [:rect {:x 0 :y (+ rr-start-y 0) :width left-column-panel-width :height 35 :fill news-colour-dark-blue}]
-     [:text {:x 5 :y (+ rr-start-y 14) :fill news-colour-abcde :font-size "12"} "A+B"]
-     [:text {:x 5 :y (+ rr-start-y 20) :fill "white" :font-size "4" :font-weight "bold"} "Respirations"]
-     [:text {:x 5 :y (+ rr-start-y 25) :fill "white" :font-size "3"} "Breaths/min"]
+     (draw-chart-axes 20 width (:respiratory-rate news-charts))
+     (plot-results 20 start-date width-in-boxes :day (:respiratory-rate news-charts) news-data :respiratory-rate)
 
-     [:rect {:x left-column-panel-width :y (+ rr-start-y 0) :width left-column-label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
-     [:rect {:x left-column-panel-width :y (+ rr-start-y 5) :width left-column-label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
-     [:rect {:x left-column-panel-width :y (+ rr-start-y 10) :width left-column-label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
-     [:rect {:x left-column-panel-width :y (+ rr-start-y 15) :width left-column-label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
-     [:rect {:x left-column-panel-width :y (+ rr-start-y 20) :width left-column-label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
-     [:rect {:x left-column-panel-width :y (+ rr-start-y 25) :width left-column-label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
-     [:rect {:x left-column-panel-width :y (+ rr-start-y 30) :width left-column-label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
-     ;; RR labels
-     (respiratory-rate-labels rr-start-y)
+     (draw-chart-axes 60 width (:sp02-scale-1 news-charts))
+     (plot-results 60 start-date width-in-boxes :day (:sp02-scale-1 news-charts) news-data :spO2)
 
-     [:rect {:x left-column-width :y (+ rr-start-y 0) :width width :height "5" :fill "url(#grid-score-3)"}]
-     [:rect {:x left-column-width :y (+ rr-start-y 5) :width width :height "5" :fill "url(#grid-score-2"}]
-     [:rect {:x left-column-width :y (+ rr-start-y 10) :width width :height "15" :fill "url(#grid-score-0"}]
-     [:rect {:x left-column-width :y (+ rr-start-y 25) :width width :height "5" :fill "url(#grid-score-1"}]
-     [:rect {:x left-column-width :y (+ rr-start-y 30) :width width :height "5" :fill "url(#grid-score-3"}]
+     (draw-chart-axes 85 width (:air-or-oxygen news-charts))
 
-     ;;
-     ;; draw results from data
-     (doall (map #(
-                    let [x (calculate-x-for-days start-date (:date-time %))
-                         y (+ 2.5 (* 5 (calculate-respiratory-rate-category (:respiratory-rate %))))
-                         ]
-                    (vector
-                      :circle {:cx (+ 3.5 x) :cy (+ rr-start-y y) :r "0.2" :stroke "black" :fill "black" :key (:date-time %)})
-                    ) sorted-rr-data))
+     (draw-chart-axes 105 width (:blood-pressure news-charts))
 
+     (draw-chart-axes 180 width (:pulse news-charts))
+     (plot-results 180 start-date width-in-boxes :day (:pulse news-charts) news-data :pulse-rate)
 
-     [:polyline {:points (doall (flatten (map #(
-                                                 let [x (calculate-x-for-days start-date (:date-time %))
-                                                      y (+ 2.5 (* 5 (calculate-respiratory-rate-category (:respiratory-rate %))))
-                                                      ]
-                                                 (vector (+ 3.5 x) (+ rr-start-y y))
-                                                 ) sorted-rr-data)))
-                 :fill   "none" :stroke "black" :stroke-width 0.2 :stroke-dasharray "1 1"
-                 }]
+     (draw-chart-axes 245 width (:consciousness news-charts))
+     (plot-results 245 start-date width-in-boxes :day (:consciousness news-charts) news-data :consciousness)
 
-
-     ;;  [:rect {:x 0 :y 0 :width "32" :height "45" :fill news-colour-dark-blue}]
-     ;; [:line {:x1 "0" :y1 "1" :x2 "100%" :y2 "1" :stroke "black" :stroke-width "2"}]
-     ;;   [:line {:x1 "0" :y1 "35" :x2 "100%" :y2 "35" :stroke "black" :stroke-width "2"}]
-
-
+     (draw-chart-axes 275 width (:temperature news-charts))
+     (plot-results 275 start-date width-in-boxes :day (:temperature news-charts) news-data :temperature)
 
      (comment
        ;; spO2 scale -1
@@ -496,22 +614,17 @@
 (defn form-early-warning-score
   [save-func]
   (let [results (reagent/atom nil)
-        drawing-start-date (reagent/atom (time-core/date-time 2020 4 4))]
+        drawing-start-date (reagent/atom (time-core/date-time 2020 3 24))]
     (fn [value]
       [:div
 
-      ;; [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
-
-       [:button.button {:class    "is-primary"
-                         :on-click #(swap-vals! drawing-start-date (fn [old] (time-core/minus old (time-core/days 7))))} " << "]
-       [:button.button {:class    "is-primary"
-                        :on-click #(swap-vals! drawing-start-date (fn [old] (time-core/minus old (time-core/days 1))))} " < "]
-
-      [:button.button {:class    "is-primary"
-                         :on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 1))))} " > "]
-       [:button.button {:class    "is-primary"
-                        :on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]
-
+       [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
+       [:div
+        [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 7))))} " << "]
+        [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 1))))} " < "]
+        [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 1))))} " > "]
+        [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]
+        ]
        [test-drawing @drawing-start-date]
 
        [respiratory-rate results [:resp-rate]]
