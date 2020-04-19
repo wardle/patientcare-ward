@@ -297,21 +297,25 @@
 
 (def news-data [
                 {:date-time      (time-core/date-time 2020 4 9 9 3 27) :respiratory-rate 12 :pulse-rate 110
-                 :blood-pressure [138 82]}
+                 :blood-pressure {:systolic 138 :diastolic 82}}
+                {:date-time      (time-core/date-time 2020 4 9 15 3 27) :respiratory-rate 14 :pulse-rate 90
+                 :blood-pressure {:systolic 142 :diastolic 70}}
 
                 {:date-time (time-core/date-time 2020 4 12 9 3 27) :respiratory-rate 10 :pulse-rate 82 :temperature 39.5}
 
                 {:date-time (time-core/date-time 2020 4 14 9 3 27) :respiratory-rate 22, :spO2 94 :consciousness :clin/alert}
                 {:date-time (time-core/date-time 2020 4 14 17 3 27) :respiratory-rate 22 :spO2 98 :conscioussness :clin/alert}
                 {:date-time (time-core/date-time 2020 4 15 10 2 45) :respiratory-rate 18 :pulse-rate 85}
-                {:date-time (time-core/date-time 2020 4 17 10 2 45) :respiratory-rate 12 :spO2 97}
+                {:date-time      (time-core/date-time 2020 4 17 10 2 45) :respiratory-rate 12 :spO2 97
+                 :blood-pressure {:systolic 138 :diastolic 82}}
                 {:date-time (time-core/date-time 2020 4 18 7 2 45) :respiratory-rate 30}
                 {:date-time (time-core/date-time 2020 4 18 9 2 45) :respiratory-rate 28 :pulse-rate 90}
                 {:date-time (time-core/date-time 2020 4 18 12 2 45) :respiratory-rate 23 :pulse-rate 110}
                 {:date-time (time-core/date-time 2020 4 18 19 2 45) :respiratory-rate 8 :consciousness :clin/alert}
                 {:date-time (time-core/date-time 2020 4 8 22 2 45) :respiratory-rate 14 :pulse-rate 120 :spO2 92}
                 {:date-time (time-core/date-time 2020 4 8 10 2 45) :respiratory-rate 12 :pulse-rate 140}
-                {:date-time (time-core/date-time 2020 4 7 9 2 45) :respiratory-rate 22 :pulse-rate 90 :spO2 88 :consciousness :clin/confused}
+                {:date-time      (time-core/date-time 2020 4 7 9 2 45) :respiratory-rate 22 :pulse-rate 90 :spO2 88 :consciousness :clin/confused
+                 :blood-pressure {:systolic 201 :diastolic 110}}
                 {:date-time (time-core/date-time 2020 4 6 11 2 45) :respiratory-rate 12}
                 {:date-time (time-core/date-time 2020 4 5 11 2 45) :respiratory-rate 12 :temperature 37.2}
                 {:date-time (time-core/date-time 2020 4 4 11 2 45) :respiratory-rate 12 :consciousness :clin/unresponsive}
@@ -350,9 +354,10 @@
   (map-indexed (fn [index item]
                  (vector :text {:key item :x x :y (+ start-y 4 (* index 5)) :fill "black" :font-size 4 :text-anchor "middle"}
                          (cond
-                           (vector? item) (range-to-label item) ;; turn a vector into a label
-                           (keyword? item) (name item)
-                           (string? item) item
+                           (vector? item) (range-to-label item) ;; turn a vector into a label based on range
+                           (keyword? item) (name item)      ;; turn keywords into simple labels
+                           (string? item) item              ;; use a string if specified
+                           :else ""
                            )
                          )) categories))
 
@@ -394,7 +399,6 @@
   (case scale
     :day (time-core/plus start-date (time-core/days number-boxes)))) ;; each box is a day.
 
-
 (defn plot-results
   "Plots the results for a chart; designed to be used in conjunction with draw-chart to draw the scales/grid"
   [start-y start-date plot-width scale chart data value-key]
@@ -417,8 +421,6 @@
                                                  ) sorted-data)))
                  :fill   "none" :stroke "black" :stroke-width 0.2 :stroke-dasharray "1 1"
                  }]]))
-
-
 
 
 
@@ -476,6 +478,40 @@
    })
 
 
+
+(defn plot-results-bp
+  "Specialised results plot just for blood pressure"
+  [start-y start-date plot-width scale data value-key]
+  (let [end-date (calculate-end-date-for-scale start-date plot-width scale)
+        chart (:blood-pressure news-charts)
+        sorted-data (->> data
+                         (filter #(and (time-core/after? (:date-time %1) start-date) (time-core/before? (:date-time %1) end-date)))
+                         (filter #(not (nil? (get %1 value-key))))
+                         (sort-by :date-time #(time-core/before? %1 %2)))]
+
+    [:<>
+     (doall (map #(let [x (+ 56 (calculate-x-for-scale start-date (:date-time %) scale))
+                        value (get % value-key)             ;; value is itself a map of systolic and diastolic
+                        systolic (+ 2.5 (* 5 ((:indexed-by chart) (:systolic value) (:categories chart))))
+                        diastolic (+ 2.5 (* 5 ((:indexed-by chart) (:diastolic value) (:categories chart))))]
+                    (vector
+                      :polyline {:points [(+ 3.5 x) (+ start-y systolic) (+ 3.5 x) (+ start-y diastolic)]
+                                 :fill   "none" :stroke "black" :stroke-width 0.4 :marker-start "url(#arrow)" :marker-end "url(#arrow)"}
+                      )
+                    ) sorted-data))
+     (comment
+       [:polyline {:points (doall (flatten (map #(
+                                                   let [x (+ 56 (calculate-x-for-scale start-date (:date-time %) scale))
+                                                        y (+ 2.5 (* 5 ((:indexed-by chart) (:systolic (get % value-key)) (:categories chart))))]
+                                                   (vector (+ 3.5 x) (+ start-y y))
+                                                   ) sorted-data)))
+                   :fill   "none" :stroke "black" :stroke-width 0.2 :stroke-dasharray "1 1"
+                   }])]
+    ))
+
+
+
+
 (defn test-drawing [start-date]
   (let [width-in-boxes 28                                   ;; number of boxes to show
         box-width 7                                         ;; the viewbox is based on the paper NEWS chart in millimetres, so our internal scale is same as "millimetres"
@@ -513,7 +549,8 @@
        [:rect {:width 7 :height 5 :fill news-colour-score-1 :stroke "black" :stroke-width 0.1}]]
       [:pattern#grid-score-0 {:width "7" :height "5" :patternUnits "userSpaceOnUse"}
        [:rect {:width 7 :height 5 :fill "white" :stroke "black" :stroke-width 0.1}]]
-
+      [:marker#arrow {:viewBox "0 0 10 10" :refX "5" :refY "5" :markerWidth "6" :markerHeight "6" :orient "auto-start-reverse"}
+       [:path {:d "M 0 0 L 10 5 L 0 10 z"}]]
       ]
 
      ;; date / time
@@ -567,6 +604,7 @@
      (draw-chart-axes 85 width (:air-or-oxygen news-charts))
 
      (draw-chart-axes 105 width (:blood-pressure news-charts))
+     (plot-results-bp 105 start-date width-in-boxes :day news-data :blood-pressure)
 
      (draw-chart-axes 180 width (:pulse news-charts))
      (plot-results 180 start-date width-in-boxes :day (:pulse news-charts) news-data :pulse-rate)
