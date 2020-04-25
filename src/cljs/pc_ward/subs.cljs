@@ -16,11 +16,6 @@
 
 
 (reg-sub
-  ::name
-  (fn [db]
-    (:name db)))
-
-(reg-sub
   ::active-panel
   (fn [db _]
     (:active-panel db)))
@@ -39,7 +34,7 @@
 (reg-sub
   :user/authenticated-user
   (fn [db _]
-    (get-in db [:authenticated-user :user])))
+    (get-in db [:authenticated-user :practitioner])))
 
 (reg-sub
   :user/full-name
@@ -51,13 +46,13 @@
           title (clojure.string/join " " (:prefixes human-name))
           first-names (:given human-name)
           last-names (:family human-name)]
-      (str title " " first-names " " last-names)
-      )))
+      (str title " " first-names " " last-names))))
+
 
 (reg-sub
-  :user/login-error
-  (fn [db _]
-    (error-message (:login-error db))))
+  :user/error
+  (fn [db [_ id]]
+    (error-message (get-in db [:errors id]))))
 
 (reg-sub
   :current-time

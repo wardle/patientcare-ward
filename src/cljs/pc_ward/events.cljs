@@ -7,8 +7,8 @@
     [pc-ward.db :as db]
     [pc-ward.config :as config]
     [pc-ward.util :as util]
-    [clojure.string :as string]
-    ))
+    [clojure.string :as string]))
+
 
 
 (defn check-and-throw
@@ -24,7 +24,7 @@
 ;; initialisation of "database"
 (reg-event-db
   ::initialize-db
-  []
+  [check-spec-interceptor]
   (fn [_ _]
     db/default-db))
 
@@ -85,36 +85,31 @@
 
 (reg-event-db
   :user/session-expired
+  [check-spec-interceptor]
   (fn [db [_]]
     (-> db
-        (assoc :login-error "Your session expired. Please login again")
+        (assoc-in [:errors :login] "Your session expired. Please login again")
         (dissoc :authenticated-user))))
-
-(def background-spinner
-  (re-frame.core/->interceptor
-    :id :background-spinner
-    :before (fn [context]
-              (update-in context [:coeffects :db :show-background-spinner] inc))
-    :after (fn [context]
-             (update-in context [:effects :db :show-background-spinner] dec))))
 
 ;; user/user-login-start kicks off a login event, cascading to return an error, or
 ;; a login action, via an intermediary request for a service login if we don't have an active token
 (reg-event-fx
   :user/user-login-start
-  [(when ^boolean goog.DEBUG re-frame.core/debug)]
+  [check-spec-interceptor
+   (when ^boolean goog.DEBUG re-frame.core/debug)]
   (fn [{db :db} [_ namespace username password]]            ;; note first argument is cofx, so we extract db (:db cofx) using clojure's destructuring
     (js/console.log "attempting login " username)
     (if (or (string/blank? username) (string/blank? password))
-      {:db (assoc db :login-error "Unauthorised: invalid credentials")}
-      {:db         (dissoc db :login-error)
+      {:db (assoc-in db [:errors :login] "Unauthorised: invalid credentials")}
+      {:db         (update-in db [:errors] dissoc :login)
        :dispatch-n [[:user/foreground-spinner true]
                     [:user/service-login-start [:user/user-login-do namespace username password]]
-                    [:user/foreground-spinner false]]}
-      )))
+                    [:user/foreground-spinner false]]})))
+
 
 (reg-event-fx
   :user/user-login-do
+  [check-spec-interceptor]
   (fn [{db :db} [_ namespace username password]]
     (js/console.log "doing login " username)
     {:http-xhrio {:method          :post
@@ -125,10 +120,10 @@
                   :params          {
                                     :user     {
                                                :system "https://fhir.nhs.uk/Id/cymru-user-id"
-                                               :value  username
-                                               }
-                                    :password password
-                                    }
+                                               :value  username}
+
+                                    :password password}
+
                   :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
                   :on-success      [:user/user-login-success namespace username]
                   :on-failure      [:user/user-login-failure]}}))
@@ -136,7 +131,8 @@
 
 (reg-event-fx
   :user/refresh-user-token
-  [(when ^boolean goog.DEBUG re-frame.core/debug)]          ;; this is an interceptor
+  [check-spec-interceptor
+   (when ^boolean goog.DEBUG re-frame.core/debug)]          ;; this is an interceptor
   (fn [{db :db} [_ namespace username]]                     ;; note first argument is cofx, so we extract db (:db cofx) using clojure's destructuring
     (js/console.log "Refreshing user token")
     {:db         (assoc db :show-background-spinner true)   ;; causes the twirly-waiting-dialog to show??
@@ -151,6 +147,7 @@
 
 (reg-event-fx
   :user/user-login-success
+  [check-spec-interceptor]
   (fn [{db :db} [_ namespace username response]]
     (js/console.log "User login success: response: " + response)
     {:db       (-> db
@@ -162,29 +159,33 @@
 
 (reg-event-db
   :user/set-authenticated-user
+  [check-spec-interceptor]
   (fn [db [_ response]]
     (js/console.log "Fetched user... response: " response)
-    (assoc-in db [:authenticated-user :user] response)
-    ))
+    (assoc-in db [:authenticated-user :practitioner] response)))
+
 
 (reg-event-db
   :user/set-authenticated-user-failed
+  [check-spec-interceptor]
   (fn [db [_ response]]
     (js/console.log "Fetched user... response: " response)
     (-> db
         (dissoc :authenticated-user)
-        (assoc :login-error response))))
+        (assoc-in [:errors :login] response))))
 
 (reg-event-db
   :user/user-login-failure
+  [check-spec-interceptor]
   (fn [db [_ response]]
     (js/console.log "User login failure: response: " + response)
-    (assoc db :login-error response)))
+    (assoc-in db [:errors :login] response)))
 
 
 
 (reg-event-fx
   :snomed/get-concept
+  [check-spec-interceptor]
   (fn [{db :db} [_ concept-id]]
     (let [cached (get-in db [:snomed :concepts concept-id] :not-found)]
       (if (= cached :not-found)
@@ -199,14 +200,16 @@
 
 (reg-event-db
   :snomed/get-concept-success
+  [check-spec-interceptor]
   (fn [db [_ concept-id response]]
-    (assoc-in db [:snomed :concepts concept-id] response)
-    ))
+    (assoc-in db [:snomed :concepts concept-id] response)))
+
 
 (reg-event-db
   :snomed/get-concept-failure
+  [check-spec-interceptor]
   (fn [db [_ concept-id response]]
-    (assoc-in db [:snomed :error] response)))
+    (assoc-in db [:snomed concept-id :error] response)))
 
 
 (reg-event-fx
@@ -216,11 +219,12 @@
 
 (reg-event-fx
   :snomed/search
+  [check-spec-interceptor]
   (fn [{db :db} [_ id {s :s is-a :is-a max-hits :max-hits}]]
     (let [clear-results {:db (-> db
                                  (update-in [:snomed id] dissoc :error)
-                                 (update-in [:snomed id] dissoc :results)
-                                 )}]
+                                 (update-in [:snomed id] dissoc :results))}]
+
       (if (clojure.string/blank? s)
         clear-results
         (assoc clear-results :http-xhrio {:method          :get
@@ -236,6 +240,7 @@
 
 (reg-event-db
   :snomed/search-success
+  [check-spec-interceptor]
   (fn [db [_ id response]]
     (-> db
         (update-in [:snomed id] dissoc :error)
@@ -243,6 +248,7 @@
 
 (reg-event-db
   :snomed/search-failure
+  [check-spec-interceptor]
   (fn [db [_ id response]]
     (-> db
         (update-in [:snomed id] dissoc :results)
@@ -255,16 +261,18 @@
 
 (reg-event-fx
   :patient/search
-  [(when ^boolean goog.DEBUG re-frame.core/debug)]
+  [check-spec-interceptor
+   (when ^boolean goog.DEBUG re-frame.core/debug)]
   (fn [{db :db} [_ search]]                                 ;; note first argument is cofx, so we extract db (:db cofx) using clojure's destructuring
     (js/console.log "searching for patient: " search)
     {:dispatch-n [[:user/foreground-spinner true]
                   [:user/service-login-start [:concierge/resolve-identifier "https://fhir.cardiff.wales.nhs.uk/Id/pas-identifier" search :patient/search-success :patient/search-failed]]
-                  [:user/foreground-spinner false]]}
-    ))
+                  [:user/foreground-spinner false]]}))
+
 
 (reg-event-db
   :patient/clear-search
+  [check-spec-interceptor]
   (fn [db [_]]
     (-> db
         (dissoc :patient-search-results)
@@ -272,15 +280,17 @@
 
 (reg-event-db
   :patient/search-success
+  [check-spec-interceptor]
   (fn [db [_ response]]
     (js/console.log "Found patient: " response)
     (-> db
         (assoc :patient-search-results response)
-        (update-in [:errors] dissoc :patient-search)
-        )))
+        (update-in [:errors] dissoc :patient-search))))
+
 
 (reg-event-db
   :patient/search-failed
+  [check-spec-interceptor]
   (fn [db [_ response]]
     (js/console.log "Patient search: error: " response)
     (-> db
@@ -290,6 +300,7 @@
 
 (reg-event-fx
   :concierge/resolve-identifier
+  [check-spec-interceptor]
   (fn [{db :db} [_ system value on-success on-failure]]
     {:http-xhrio {:method          :get
                   :uri             (str config/concierge-server-address "/v1/identifier/" value)
@@ -311,10 +322,10 @@
                 :params          {
                                   :user     {
                                              :system "https://concierge.eldrix.com/Id/service-user"
-                                             :value  "patientcare"
-                                             }
-                                  :password config/patientcare-service-secret
-                                  }
+                                             :value  "patientcare"}
+
+                                  :password config/patientcare-service-secret}
+
                 :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
                 :on-success      [:user/service-login-success next-event]
                 :on-failure      [:user/service-login-failure]}})
@@ -342,7 +353,8 @@
 ;; TODO: probably switch to an interceptor to annotate any events that need a service account token
 (reg-event-fx
   :user/service-login-start
-  [(when ^boolean goog.DEBUG re-frame.core/debug)]          ;; this is an interceptor
+  [check-spec-interceptor
+   (when ^boolean goog.DEBUG re-frame.core/debug)]          ;; this is an interceptor
   (fn [{db :db} [_ next-event]]                             ;; note first argument is cofx, so we extract db (:db cofx) using clojure's destructuring
     (comment (js/console.log "service token needs refreshing? " (util/jwt-expires-in-seconds? (:concierge-service-token db) 120)))
     (let [expires (util/jwt-expires-seconds (:concierge-service-token db))]
@@ -355,42 +367,45 @@
 ;; and stores the token received from concierge
 (reg-event-fx
   :user/service-login-success
-  [(when ^boolean goog.DEBUG re-frame.core/debug)]          ;; this is an interceptor
+  [check-spec-interceptor
+   (when ^boolean goog.DEBUG re-frame.core/debug)]          ;; this is an interceptor
   (fn [{db :db} [_ next-event response]]
     (js/console.log "got token: " (:token response))
     {:db       (assoc db :concierge-service-token (:token response))
-     :dispatch next-event
-     }))
+     :dispatch next-event}))
+
 
 ;; in the event of service account login token refresh failure,
 ;; try a new login
 (reg-event-fx
   :user/service-login-refresh-failure
-  [(when ^boolean goog.DEBUG re-frame.core/debug)]
+  [check-spec-interceptor
+   (when ^boolean goog.DEBUG re-frame.core/debug)]
   (fn [{db :db} [_ response]]
     {:db       (dissoc db :concierge-service-token)
      :dispatch [:user/service-login-start []]}))
 
 (reg-event-db
   :user/service-login-failure
-  [(when ^boolean goog.DEBUG re-frame.core/debug)]
+  [check-spec-interceptor
+   (when ^boolean goog.DEBUG re-frame.core/debug)]
   (fn [{db :db} [_ response]]
     (js/console.log "service login failure: response " + response)
-    (assoc db :login-error response)))
+    (assoc-in db [:errors :login] response)))
 
 (reg-event-db
   ::set-active-panel
+  [check-spec-interceptor]
   (fn [db [_ active-panel]]
     (assoc db :active-panel active-panel)))
 
 (reg-event-db
   :user/logout
+  [check-spec-interceptor]
   (fn [db [_ user]]
     (js/console.log "Logging out user" user)
-      (-> db
-          (dissoc :authenticated-user)
-          (dissoc :patient-search-results)
-          (dissoc :login-error)
-          (dissoc :errors)
-          )
-    ))
+    (-> db
+        (dissoc :authenticated-user)
+        (dissoc :patient-search-results)
+        (dissoc :errors))))
+

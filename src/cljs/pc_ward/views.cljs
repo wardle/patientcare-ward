@@ -19,7 +19,7 @@
   [:section.section [:div.container [:h1.title "PatientCare"] [:p.subtitle "Ward"]]])
 
 (defn login-panel []
-  (let [error (rf/subscribe [:user/login-error])
+  (let [error (rf/subscribe [:user/error :login])
         username (reagent/atom "")
         password (reagent/atom "")
         submitting (rf/subscribe [:show-foreground-spinner])
@@ -398,8 +398,7 @@
    [:div.card-content
     [:div.content "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus nec iaculis mauris."
      [:a {:href "#"} "@bulmaio"] "." [:a {:href "#"} "#css"] [:a {:href "#"} "#responsive"]
-     [:br]
-     [:pre patient]]]
+     [:br]]]
 
    [:footer.card-footer
     [:a.card-footer-item.is-link {:href "#"} "View record"]
