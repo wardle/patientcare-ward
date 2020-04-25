@@ -6,6 +6,7 @@
     [cljs.spec.alpha :as s]
     [pc-ward.db :as db]
     [pc-ward.config :as config]
+    [pc-ward.concierge :as concierge]
     [pc-ward.util :as util]
     [clojure.string :as string]))
 
@@ -162,7 +163,12 @@
   [check-spec-interceptor]
   (fn [db [_ response]]
     (js/console.log "Fetched user... response: " response)
-    (assoc-in db [:authenticated-user :practitioner] response)))
+    (if (s/valid? :pc-ward.concierge/practitioner response)
+      (assoc-in db [:authenticated-user :practitioner] response)
+      (do
+        (js/console.log "Incorrect spec for practitioner: " (s/explain-str ::pc-ward.concierge/practitioner response))
+        (dispatch [:user/logout])
+        ))))
 
 
 (reg-event-db
