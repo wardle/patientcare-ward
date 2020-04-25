@@ -1,12 +1,13 @@
 (ns pc-ward.core
   (:require
-   [reagent.core :as reagent]
+    [reagent.core :as reagent]
+    [reagent.dom :as dom]
    [re-frame.core :as re-frame]
    [pc-ward.events :as events]
    [pc-ward.routes :as routes]
    [pc-ward.views :as views]
-   [pc-ward.config :as config]
-   ))
+   [pc-ward.config :as config]))
+
 
 
 (defn dev-setup []
@@ -15,7 +16,7 @@
 
 (defn ^:dev/after-load mount-root []
   (re-frame/clear-subscription-cache!)
-  (reagent/render [views/main-panel]
+  (dom/render [views/main-panel]
                   (.getElementById js/document "app")))
 
 (defn init []

@@ -10,8 +10,8 @@
     [pc-ward.config :as config]
     [pc-ward.subs :as subs]
     [pc-ward.clinical :as clin]
-    [pc-ward.news-chart :as news]
-    ))
+    [pc-ward.news-chart :as news]))
+
 
 
 
@@ -54,8 +54,8 @@
 
             [:button.button {:class    ["is-primary" (when @submitting "is-loading")]
                              :disabled @submitting
-                             :on-click doLogin} " Login "]
-            ]
+                             :on-click doLogin} " Login "]]
+
            (if-not (string/blank? @error) [:div.notification.is-danger [:p @error]])]]]]])))
 
 (defn logout-button [] [:button.button {:on-click #(rf/dispatch [:user/logout])} "Logout"])
@@ -102,9 +102,9 @@
            [:a.navbar-item "Welsh Clinical Portal (Cardiff)"]
            [:a.navbar-item "Welsh Clinical Portal (Cwm Taf Morgannwg)"]
            [:hr.navbar-divider]
-           [:a.navbar-item "View radiology images"]]]
+           [:a.navbar-item "View radiology images"]]]]
 
-         ]
+
         [:div.navbar-end
          [:a.navbar-item [clock]]
          [:div.navbar-item.has-dropdown.is-hoverable
@@ -155,19 +155,19 @@
                                  :p.panel-block.is-size-7 {:key (:id %)}
                                  (if (and (not= @active-panel :preferred-synonyms) (= preferred-id (:id %)))
                                    [:strong (:term %)]
-                                   (:term %))
-                                 ))))))
+                                   (:term %))))))))
+
          [:div.panel-block
-          [:button.button.is-link.is-outlined.is-fullwidth "Save"]]]
-        ))))
+          [:button.button.is-link.is-outlined.is-fullwidth "Save"]]]))))
+
 
 (defn snomed-autocomplete
   "Display a SNOMED CT autocompletion box"
   [v kp {id     :id                                         ;; id (e.g. ::new-diagnosis)
          name   :name                                       ;; name for this, eg. diagnosis
          common :common                                     ;; list of common concepts, if present will be shown in pop-up list
-         is-a   :is-a                                       ;; vector containing is-a constraints
-         }]
+         is-a   :is-a}]                                     ;; vector containing is-a constraints
+
   {:pre [(vector? kp)]}
   (let [
         search (reagent/atom "")
@@ -198,14 +198,14 @@
                                      item (nth @results val)]
                                  (rf/dispatch [:snomed/get-concept (:concept_id item)])
                                  (reset! selected-index val))}
-          (doall (map-indexed (fn [index item] [:option {:key index :value index} (:term item)]) @results))
-          ]]
+          (doall (map-indexed (fn [index item] [:option {:key index :value index} (:term item)]) @results))]]
+
 
         ;; if we have a selected result, show it
         (if (and (> (count @results) 0) (not (nil? @selected-index)))
-          [snomed-show-concept (:concept_id (nth @results @selected-index))])
+          [snomed-show-concept (:concept_id (nth @results @selected-index))])]])))
 
-        ]])))
+
 
 
 
@@ -243,10 +243,10 @@
         [:label.radio
          [:input {:type "radio" :name "answer"}] " On air"]
         [:label.radio
-         [:input {:type "radio" :name "answer"}] " On oxygen"]]
-       ]]]
-    )
-  )
+         [:input {:type "radio" :name "answer"}] " On oxygen"]]]]]))
+
+
+
 
 (defn respiratory-rate
   "Component to record respiratory rate, with result pushed to atom (v) using key path (kp) (a vector of keys)"
@@ -279,10 +279,10 @@
           [:span.icon.is-small.is-left [:i.fas.fa-lungs]] (comment [:span.icon.is-small.is-right [:i.fas.fa-check]])]
          [:div.control
           [:a.button.is-info {:on-click #(swap! timer update-in [:breaths] inc)} "Count breath"]
-          [:a.button.is-danger {:on-click stop-timer} "Stop timer"]]]
-        )
-      ))
-  )
+          [:a.button.is-danger {:on-click stop-timer} "Stop timer"]]]))))
+
+
+
 
 
 
@@ -310,9 +310,9 @@
                 {:date-time (time-core/date-time 2020 4 6 11 2 45) :respiratory-rate 12}
                 {:date-time (time-core/date-time 2020 4 5 11 2 45) :respiratory-rate 12 :temperature 37.2}
                 {:date-time (time-core/date-time 2020 4 4 11 2 45) :respiratory-rate 12 :consciousness :clin/unresponsive}
-                {:date-time (time-core/date-time 2020 4 19 9 2 45) :respiratory-rate 12 :consciousness :clin/alert :pulse-rate 95 :temperature 37.2}
+                {:date-time (time-core/date-time 2020 4 19 9 2 45) :respiratory-rate 12 :consciousness :clin/alert :pulse-rate 95 :temperature 37.2}])
 
-                ])
+
 
 
 
@@ -329,8 +329,8 @@
         [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 7))))} " << "]
         [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 1))))} " < "]
         [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 1))))} " > "]
-        [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]
-        ]
+        [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]]
+
        [news/test-drawing @drawing-start-date]
 
        [respiratory-rate results [:resp-rate]]
@@ -362,10 +362,10 @@
        [:p "RR: " (:resp-rate @results) " score: " (clin/calc-news-respiratory (:resp-rate @results))]
        [:p "o2 sats:" (get-in @results [:o2-sats :o2-saturations]) " score: " (clin/calc-news-o2-sats-scale-1 (get-in @results [:o2-sats :o2-saturations]))]
        [:p "pulse: " (:pulse @results) " score: " (clin/calc-news-pulse (:pulse @results))]
-       [:p "temperature: " (:temperature @results) " score: " (clin/calc-news-temperature (:temperature @results))]
+       [:p "temperature: " (:temperature @results) " score: " (clin/calc-news-temperature (:temperature @results))]])))
 
-       ]
-      )))
+
+
 
 (defn welcome []
   [:article.message.is-warning
@@ -384,8 +384,8 @@
       [:li "Recording and charting of observations including the National Early Warning Score 2"]
       [:li "Integration with local and national document repositories"]
       [:li "Support for desktop computers and mobile devices"]]
-     [:p [:strong "To get started, type in a hospital number in the search box"]]
-     ]]])
+     [:p [:strong "To get started, type in a hospital number in the search box"]]]]])
+
 
 (defn show-patient
   [patient confirm-func cancel-func]
@@ -393,26 +393,27 @@
   [:div.card
    [:header.card-header
     [:p.card-header-title (clojure.string/join " " [(:title patient) (:firstnames patient) (:lastname patient)])]
-    [:p.card-header-title.is-pulled-right 123456789]
-    ]
+    [:p.card-header-title.is-pulled-right 123456789]]
+
    [:div.card-content
     [:div.content "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus nec iaculis mauris."
      [:a {:href "#"} "@bulmaio"] "." [:a {:href "#"} "#css"] [:a {:href "#"} "#responsive"]
      [:br]
-     ]]
+     [:pre patient]]]
+
    [:footer.card-footer
     [:a.card-footer-item.is-link {:href "#"} "View record"]
-    [:a.card-footer-item {:on-click cancel-func} "Cancel"]]]
+    [:a.card-footer-item {:on-click cancel-func} "Cancel"]]])
 
-  )
+
 
 
 (defn home-panel []
   (let [
         search (reagent/atom "")
         search-results (rf/subscribe [:patient/search-results])
-        error (rf/subscribe [:patient/search-error])
-        ]
+        error (rf/subscribe [:patient/search-error])]
+
     (fn []
       [:div
        [nav-bar]
@@ -448,9 +449,8 @@
 
             [:div.panel-block
              [:button.button.is-outlined.is-fullwidth
-              {:on-click #(rf/dispatch [:patient/search @search])
-               } "Search"]]
-            ]
+              {:on-click #(rf/dispatch [:patient/search @search])} "Search"]]]
+
 
            (comment
              [:article.panel.is-link
@@ -459,8 +459,8 @@
               [:p.panel-tabs
                [:a "Clinical"]
                [:a "Research"]
-               [:a.is-active "All"]
-               ]
+               [:a.is-active "All"]]
+
               [:a.panel-block
                [:span.panel-icon
                 [:i.fas.fa-clinic-medical {:aria-hidden "true"}]] "COVID team 23"]
@@ -477,10 +477,10 @@
                [:span.panel-icon
                 [:i.fas.fa-university {:aria-hidden "true"}]] "MS Epidemiology study"]
               [:div.panel-block
-               [:button.button.is-link.is-outlined.is-fullwidth "Manage..."]]
-              ]
-             )
-           ]
+               [:button.button.is-link.is-outlined.is-fullwidth "Manage..."]]])]
+
+
+
           [:div.column
 
            (if-not (nil? @error)
@@ -495,14 +495,14 @@
                  [welcome]
                  [show-patient @search-results #() #(do (reset! search "")
                                                         (.focus (.getElementById js/document "search-field-id"))
-                                                        (rf/dispatch [:patient/clear-search]))]
-                 )))
+                                                        (rf/dispatch [:patient/clear-search]))])))]]]]])))
 
-           ]]]
-        ]
-       ]
-      )
-    ))
+
+
+
+
+
+
 
 
 
@@ -534,8 +534,8 @@
     (fn []
       (if (nil? @authenticated-user)
         [login-panel]
-        [show-panel @active-panel]
-        ))))
+        [show-panel @active-panel]))))
+
 
 
 (comment
@@ -543,6 +543,5 @@
   #(case (.-which %)
      13 (" It's thirteen ")                                 ; enter
      20 (" It's twenty ")                                   ; esc
-     nil)
+     nil))
 
-  )

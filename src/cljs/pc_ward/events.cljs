@@ -387,9 +387,10 @@
   :user/logout
   (fn [db [_ user]]
     (js/console.log "Logging out user" user)
-    (-> db
-        (dissoc :authenticated-user)
-        (dissoc :patient/search-results)
-        (dissoc :login-error)
-        )
+      (-> db
+          (dissoc :authenticated-user)
+          (dissoc :patient-search-results)
+          (dissoc :login-error)
+          (dissoc :errors)
+          )
     ))
