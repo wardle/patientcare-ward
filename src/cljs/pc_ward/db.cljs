@@ -21,7 +21,7 @@
                              ::errors]))
 
 (def default-db
-  {})
+  {:active-panel :home-panel})
 
 
 

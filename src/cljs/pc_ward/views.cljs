@@ -10,10 +10,8 @@
     [pc-ward.config :as config]
     [pc-ward.subs :as subs]
     [pc-ward.clinical :as clin]
+    [pc-ward.concierge :as concierge]
     [pc-ward.news-chart :as news]))
-
-
-
 
 (defn patientcare-title []
   [:section.section [:div.container [:h1.title "PatientCare"] [:p.subtitle "Ward"]]])
@@ -44,7 +42,7 @@
             ;; password field - if user presses enter, automatically submit
             [:div.field [:label.label {:for "login-pw"} "Password"]
              [:div.control
-              [:input.input {:id          "login-pw" :type "password" :placeholder "enter password" :required true
+              [:input.input {:id          "login-pw" :type "password" :placeholder "Enter password" :required true
                              :disabled    @submitting
                              :on-key-down #(if (= 13 (.-which %)) (do
                                                                     (reset! password (-> % .-target .-value))
@@ -113,9 +111,9 @@
            [:a.navbar-item "Profile"]
            [:a.navbar-item "Teams"]
            [:hr.navbar-divider]
-           [:a.navbar-item {:disabled true} "Report an issue"]]
-          [:div.buttons
-           [:a.button.is-light {:on-click #(rf/dispatch [:user/logout])} "Logout"]]]]]])))
+           [:a.navbar-item {:disabled true} "Report an issue"]]]
+         [:div.buttons
+          [:a.button.is-light {:on-click #(rf/dispatch [:user/logout])} "Logout"]]]]])))
 
 
 (defn snomed-show-concept
@@ -387,23 +385,85 @@
      [:p [:strong "To get started, type in a hospital number in the search box"]]]]])
 
 
+(defn format-nhs-number
+  "Formats an NHS number into the standard (3) (3) (4) pattern"
+  [nnn]
+  (apply str (remove nil? (interleave nnn [nil nil " " nil nil " ", nil nil nil nil]))))
+
+
+
+
+;;  (comment
+;        [:div.card
+;         [:header.card-header
+;          [:p.card-header-title
+;           (clojure.string/join " " [(:title patient) (:firstnames patient) (:lastname patient)])]
+;          [:div.level
+;           [:div.level-left]
+;           [:div.level-right
+;            [:div.level
+;             [:div.level-left (first (concierge/identifiers-for-system patient (:cardiff-pas concierge/systems)))]
+;             (when-not (nil? nnn) [:div.column (format-nhs-number nnn)])
+;             [:div.level-right (string/join " " (rest (concierge/identifiers-for-system patient (:cardiff-pas concierge/systems))))]]]
+;           ]
+;          (when (concierge/patient-deceased? patient) [:span.card-header-icon " (Deceased)"])]
+;
+
+
+;;       ])))
+;  )
+
+
 (defn show-patient
   [patient confirm-func cancel-func]
+  (let [nnn (first (concierge/identifiers-for-system patient (:nhs-number concierge/systems)))]
+    (fn [patient confirm-func cancel-func]
+      [:div.card
+       [:header.card-header
+        [:p.card-header-title
+         (when (concierge/patient-deceased? patient) [:div.level-item.tag "Deceased"])
+         (clojure.string/join " " [(:title patient) (:firstnames patient) (:lastname patient)])]]
 
-  [:div.card
-   [:header.card-header
-    [:p.card-header-title (clojure.string/join " " [(:title patient) (:firstnames patient) (:lastname patient)])]
-    [:p.card-header-title.is-pulled-right 123456789]]
+       [:div.card-content
+        [:div.columns
+         [:div.column
 
-   [:div.card-content
-    [:div.content "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus nec iaculis mauris."
-     [:a {:href "#"} "@bulmaio"] "." [:a {:href "#"} "#css"] [:a {:href "#"} "#responsive"]
-     [:br]]]
+          [:table.table
+           [:tbody
+            (when-not (nil? nnn)
+              [:tr [:th "NHS number: "] [:td (format-nhs-number nnn)]])
+            [:tr [:th "Date of birth:"] [:td (concierge/format-date (concierge/parse-date (:birthDate patient)))]]
+            (js/console.log "Addresses: " (:addresses patient))
+            (js/console.log "Addresses: " (concierge/active-addresses (:addresses patient) (time-core/now)))
+            (let [address (first (concierge/active-addresses (:addresses patient) (time-core/now)))]
+              [:tr
+               [:th "Address:"]
+               [:td (:address1 address) [:br] (:address2 address) [:br] (:address3 address) [:br] (:postcode address) [:br] (:country address)]]
+              )
+            ]]
+          ]
+         [:div.column
+          [:table.table
+           [:tbody
+            [:tr [:th "Hospital number:"] [:td (first (concierge/identifiers-for-system patient (:cardiff-pas concierge/systems)))]]
+            (cond
+              (not (concierge/patient-deceased? patient)) [:tr [:th "Current age:"] [:td (concierge/format-patient-age patient)]]
+              (string/blank? (:deceasedDate patient)) [:tr [:th "Deceased:"] [:td "Yes"]]
+              :else [:tr [:th "Date of death:"] [:td (concierge/format-date (concierge/parse-date (:deceasedDate patient)))]]
+              )
+            (if (> (count (:telephones patient)) 0)
+              (do [:tr [:th "Telephone:"]
+                   [:td (for [tel (:telephones patient)]
+                          [:<> (:number tel) [:br]])]]))        ;; TODO: add mechanism to get description for phone no
+            (if (> (count (:emails patient)) 0)
+              (do [:tr [:th "Email:"]
+                   [:td (for [email (:emails patient)]
+                          [:<> email [:br]])]]))]]]]]
 
-   [:footer.card-footer
-    [:a.card-footer-item.is-link {:href "#"} "View record"]
-    [:a.card-footer-item {:on-click cancel-func} "Cancel"]]])
-
+       [:footer.card-footer
+        [:a.card-footer-item.is-link {:href "#"} "View record"]
+        [:a.card-footer-item {:on-click cancel-func} "Cancel"]]
+       ])))
 
 
 
@@ -535,12 +595,4 @@
         [login-panel]
         [show-panel @active-panel]))))
 
-
-
-(comment
-
-  #(case (.-which %)
-     13 (" It's thirteen ")                                 ; enter
-     20 (" It's twenty ")                                   ; esc
-     nil))
 

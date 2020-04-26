@@ -88,9 +88,8 @@
   :user/session-expired
   [check-spec-interceptor]
   (fn [db [_]]
-    (-> db
-        (assoc-in [:errors :login] "Your session expired. Please login again")
-        (dissoc :authenticated-user))))
+    (-> db/default-db
+        (assoc-in [:errors :login] "Your session expired. Please login again"))))
 
 ;; user/user-login-start kicks off a login event, cascading to return an error, or
 ;; a login action, via an intermediary request for a service login if we don't have an active token
@@ -410,8 +409,13 @@
   [check-spec-interceptor]
   (fn [db [_ user]]
     (js/console.log "Logging out user" user)
-    (-> db
-        (dissoc :authenticated-user)
-        (dissoc :patient-search-results)
-        (dissoc :errors))))
+    db/default-db
+    ))
+
+
+
+ ;;   (-> db
+ ;;       (dissoc :authenticated-user)
+ ;;       (dissoc :patient-search-results)
+ ;;       (dissoc :errors))))
 
