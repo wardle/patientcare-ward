@@ -434,7 +434,7 @@
               [:tr [:th "NHS number: "] [:td (format-nhs-number nnn)]])
             [:tr [:th "Date of birth:"] [:td (concierge/format-date (concierge/parse-date (:birthDate patient)))]]
             (js/console.log "Addresses: " (:addresses patient))
-            (js/console.log "Addresses: " (concierge/active-addresses (:addresses patient) (time-core/now)))
+            (js/console.log "Addresses: " (concierge/active-addresses (:addresses patient)))
             (let [address (first (concierge/active-addresses (:addresses patient) (time-core/now)))]
               [:tr
                [:th "Address:"]

@@ -42,6 +42,15 @@
        (filter #(= (:system %) system))
        (map #(:value %))))
 
+(defn identifier->string
+  "Converts an identifier into a string such as https://fhir.nhs.uk/Id/nhs-number|1111111111"
+  [id]
+  (str (:system id) "|" (:value id)))
+
+(defn string->identifier
+  "Parses an identifier from a string such as https://fhir.nhs.uk/Id/nhs-number|1111111111"
+  [s]
+  (let [ss (str/split s #"\|")] {:system (first ss) :value (second ss)}))
 
 (defn patient-deceased?
   "Determines whether the patient is deceased or not.
@@ -96,6 +105,8 @@
     :else (time-core/within? (time-core/interval start end) date)))
 
 (defn active-addresses
-  "Get the active address(es) from the list for the date specified"
-  [addresses date]
-  (filter #(within? date (parse-date (get-in % [:period :start])) (parse-date (get-in % [:period :end]))) addresses))
+  "Get the active address(es) from the list for the date specified, or today if no date specified"
+  ([addresses]
+   (active-addresses addresses (time-core/now)))
+  ([addresses date]
+   (filter #(within? date (parse-date (get-in % [:period :start])) (parse-date (get-in % [:period :end]))) addresses)))
