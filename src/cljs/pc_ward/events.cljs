@@ -132,7 +132,7 @@
 (reg-event-fx
   :user/refresh-user-token
   [check-spec-interceptor
-   (when ^boolean goog.DEBUG re-frame.core/debug)]          ;; this is an interceptor
+   (when (debug?) re-frame.core/debug)]          ;; this is an interceptor
   (fn [{db :db} [_ namespace username]]                     ;; note first argument is cofx, so we extract db (:db cofx) using clojure's destructuring
     (js/console.log "Refreshing user token")
     {:db         (assoc db :show-background-spinner true)   ;; causes the twirly-waiting-dialog to show??
