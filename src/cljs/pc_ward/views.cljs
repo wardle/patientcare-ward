@@ -11,7 +11,12 @@
     [pc-ward.subs :as subs]
     [pc-ward.clinical :as clin]
     [pc-ward.concierge :as concierge]
-    [pc-ward.news-chart :as news]))
+    [pc-ward.news-chart :as news]
+    [clojure.string :as str]))
+
+
+(defn set-hash! [loc]
+  (set! (.-hash js/window.location) loc))
 
 (defn patientcare-title []
   [:section.section [:div.container [:h1.title "PatientCare"] [:p.subtitle "Ward"]]])
@@ -23,6 +28,7 @@
         submitting (rf/subscribe [:show-foreground-spinner])
         doLogin #(rf/dispatch [:user/user-login-start config/default-user-namespace (string/trim @username) @password])]
     (fn []
+      (set-hash! "/login")
       [:section.hero.is-full-height
        [:div.hero-body
         [:div.container
@@ -73,7 +79,7 @@
     (fn []
       [:nav.navbar.is-black.is-fixed-top {:role "navigation" :aria-label "main navigation"}
        [:div.navbar-brand
-        [:a.navbar-item [:h1 "PatientCare: " [:strong "Ward"]]]
+        [:a.navbar-item {:href "#/"} [:h1 "PatientCare: " [:strong "Ward"]]]
         [:a.navbar-burger.burger {:role     "button" :aria-label "menu" :aria-expanded @show-nav-menu
                                   :class    (if @show-nav-menu :is-active "")
                                   :on-click #(swap! show-nav-menu not)}
@@ -82,15 +88,16 @@
          [:span {:aria-hidden "true"}]]]
        [:div.navbar-menu (when @show-nav-menu {:class :is-active})
         [:div.navbar-start
-         [:a.navbar-item "Home"]
-         [:div.navbar-item.has-dropdown.is-hoverable
-          [:a.navbar-link [:span "Messages\u00A0"] [:span.tag.is-danger.is-rounded 123]]
-          [:div.navbar-dropdown
-           [:a.navbar-item "Unread messages"]
-           [:a.navbar-item "Archive"]
-           [:hr.navbar-divider]
-           [:a.navbar-item "Send a message..."]]]
-         [:a.navbar-item "Teams"]
+         [:a.navbar-item {:href "#/"} "Home"]
+         (comment
+           [:div.navbar-item.has-dropdown.is-hoverable
+            [:a.navbar-link [:span "Messages\u00A0"] [:span.tag.is-danger.is-rounded 123]]
+            [:div.navbar-dropdown
+             [:a.navbar-item "Unread messages"]
+             [:a.navbar-item "Archive"]
+             [:hr.navbar-divider]
+             [:a.navbar-item "Send a message..."]]]
+           [:a.navbar-item "Teams"])
 
          [:div.navbar-item.has-dropdown.is-hoverable
           [:a.navbar-link [:span "Links"]]
@@ -112,8 +119,7 @@
            [:a.navbar-item "Teams"]
            [:hr.navbar-divider]
            [:a.navbar-item {:disabled true} "Report an issue"]]]
-         [:div.buttons
-          [:a.button.is-light {:on-click #(rf/dispatch [:user/logout])} "Logout"]]]]])))
+         [:a.navbar-item {:on-click #(rf/dispatch [:user/logout])} "Logout"]]]])))
 
 
 (defn snomed-show-concept
@@ -413,6 +419,12 @@
 ;;       ])))
 ;  )
 
+(defn show-patient-name
+  "Nicely displays a patient name"
+  [patient]
+  [:<>
+   (when (concierge/patient-deceased? patient) [:div.tag "Deceased"])
+   [:div (clojure.string/join " " [(:title patient) (:firstnames patient) (:lastname patient)])]])
 
 (defn show-patient
   [patient confirm-func cancel-func]
@@ -421,8 +433,7 @@
       [:div.card
        [:header.card-header
         [:p.card-header-title
-         (when (concierge/patient-deceased? patient) [:div.level-item.tag "Deceased"])
-         (clojure.string/join " " [(:title patient) (:firstnames patient) (:lastname patient)])]]
+         [show-patient-name patient]]]
 
        [:div.card-content
         [:div.columns
@@ -433,8 +444,6 @@
             (when-not (nil? nnn)
               [:tr [:th "NHS number: "] [:td (format-nhs-number nnn)]])
             [:tr [:th "Date of birth:"] [:td (concierge/format-date (concierge/parse-date (:birthDate patient)))]]
-            (js/console.log "Addresses: " (:addresses patient))
-            (js/console.log "Addresses: " (concierge/active-addresses (:addresses patient)))
             (let [address (first (concierge/active-addresses (:addresses patient) (time-core/now)))]
               [:tr
                [:th "Address:"]
@@ -454,18 +463,16 @@
             (if (> (count (:telephones patient)) 0)
               (do [:tr [:th "Telephone:"]
                    [:td (for [tel (:telephones patient)]
-                          [:<> (:number tel) [:br]])]]))        ;; TODO: add mechanism to get description for phone no
+                          [:<> (:number tel) [:br]])]]))    ;; TODO: add mechanism to get description for phone no
             (if (> (count (:emails patient)) 0)
               (do [:tr [:th "Email:"]
                    [:td (for [email (:emails patient)]
                           [:<> email [:br]])]]))]]]]]
 
        [:footer.card-footer
-        [:a.card-footer-item.is-link {:href "#"} "View record"]
-        [:a.card-footer-item {:on-click cancel-func} "Cancel"]]
+        (if-not (nil? confirm-func) [:a.card-footer-item.is-link {:on-click confirm-func} "View record"])
+        (if-not (nil? cancel-func) [:a.card-footer-item {:on-click cancel-func} "Cancel"])]
        ])))
-
-
 
 (defn home-panel []
   (let [
@@ -474,7 +481,8 @@
         error (rf/subscribe [:patient/search-error])]
 
     (fn []
-      [:div
+      (set-hash! "/home")
+      [:<>
        [nav-bar]
 
        [:section.section
@@ -552,14 +560,87 @@
              (do
                (if (nil? @search-results)
                  [welcome]
-                 [show-patient @search-results #() #(do (reset! search "")
-                                                        (.focus (.getElementById js/document "search-field-id"))
-                                                        (rf/dispatch [:patient/clear-search]))])))]]]]])))
+                 [show-patient @search-results
+                  #(rf/dispatch [:patient/show @search-results])
+                  #(do (reset! search "")
+                       (.focus (.getElementById js/document "search-field-id"))
+                       (rf/dispatch [:patient/clear-search]))])))]]]]])))
+
+
+
+(defn patient-banner
+  "Show a patient banner, options can include :wide to include patient address"
+  [patient opts]
+  (fn []
+    (let [nnn (first (concierge/identifiers-for-system patient (:nhs-number concierge/systems)))
+          address (first (concierge/active-addresses (:addresses patient)))
+          cav-crn (first (concierge/identifiers-for-system patient (:cardiff-pas concierge/systems)))]
+      [:div.columns
+       [:div.column.is-narrow [:strong [show-patient-name patient]]]
+       (if (concierge/patient-deceased? patient)
+         [:div.column.is-narrow [:span.tag "Deceased"]]
+         [:div.column.is-narrow
+          (concierge/format-date (concierge/parse-date (:birthDate patient))) ": "
+          (concierge/format-patient-age patient)])
+       (when-not (nil? nnn) [:div.column.is-narrow [:strong (format-nhs-number nnn)]])
+       (when-not (nil? cav-crn) [:div.column.is-narrow cav-crn])
+       (when (:wide opts)
+         [:div.column.has-text-right (str/join ", " [(:address1 address) (:address2 address) (:address3 address) (:postcode address)])])
+
+       ])))
 
 
 
 
+(defn patient-panel []
+  (let [patient (rf/subscribe [:patient/current])
+        drawing-start-date (reagent/atom (time-core/minus (time-core/now) (time-core/days 27)))
+        show-news-chart? (reagent/atom false)]
+    (fn []
+      (set-hash! "/patient")
+      [:<>
+       (js/console.log "show modal: " @show-news-chart?)
+       [nav-bar]
+       [:section.section
+        [:div.container
+         [:div.box
+          [patient-banner @patient #{:wide}]
+          [:hr]
+          [:div.columns
+           [:div.column.is-3
+            [:aside.menu
+             [:p.menu-label "Overview"]
+             [:ul.menu-list
+              [:li [:a.is-active "Current status"]]
+              [:li [:a {:on-click #(reset! show-news-chart? true)} "NEWS chart"]]]
+             [:p.menu-label "Active episodes"]
+             [:ul.menu-list
+              [:li [:a "Inpatient - ward C6"]]
+              [:li [:a "Helen Durham neuro-inflammatory unit"]]
+              [:li [:a "General cardiology"]]]
+             ]
 
+            ]
+
+           ]
+          ]]]
+
+       [:div.modal (when @show-news-chart? {:class "is-active"})
+        [:div.modal-background {:on-click #(reset! show-news-chart? false)}]
+        [:div.modal-content.has-background-white
+         [:div.box
+          [patient-banner @patient]
+          ]
+          [:div.buttons.is-centered
+          [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 7))))} " << "]
+          [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 1))))} " < "]
+          [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 1))))} " > "]
+          [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]
+          ]
+         [news/test-drawing @drawing-start-date news-data]]
+        [:button.modal-close.is-large {:aria-label "close" :on-click #(reset! show-news-chart? false)}]
+
+        ]])))
 
 
 
@@ -580,7 +661,9 @@
 (defn- panels [panel-name]
   (case panel-name
     :home-panel [home-panel]
+    :login-panel [login-panel]
     :about-panel [about-panel]
+    :patient-panel [patient-panel]
     [:div]))
 
 (defn show-panel [panel-name]
@@ -592,7 +675,10 @@
         active-panel (rf/subscribe [::subs/active-panel])]
     (fn []
       (if (nil? @authenticated-user)
-        [login-panel]
+        (do
+          [rf/dispatch [:pc-ward.events/set-active-panel :login]]
+          [login-panel])
+
         [show-panel @active-panel]))))
 
 

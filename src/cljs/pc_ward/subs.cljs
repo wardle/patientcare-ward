@@ -78,3 +78,8 @@
   :patient/search-results
   (fn [db [_]]
     (:patient-search-results db)))
+
+(reg-sub
+  :patient/current
+  (fn [db [_]]
+    (:current-patient db)))

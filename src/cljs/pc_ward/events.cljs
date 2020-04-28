@@ -10,8 +10,6 @@
     [pc-ward.util :as util]
     [clojure.string :as string]))
 
-
-
 (defn check-and-throw
   "Throws an exception if `db` doesn't match the Spec `a-spec`."
   [a-spec db]
@@ -131,8 +129,7 @@
 
 (reg-event-fx
   :user/refresh-user-token
-  [check-spec-interceptor
-   (when (debug?) re-frame.core/debug)]          ;; this is an interceptor
+  [check-spec-interceptor]
   (fn [{db :db} [_ namespace username]]                     ;; note first argument is cofx, so we extract db (:db cofx) using clojure's destructuring
     (js/console.log "Refreshing user token")
     {:db         (assoc db :show-background-spinner true)   ;; causes the twirly-waiting-dialog to show??
@@ -302,6 +299,14 @@
         (assoc-in [:errors :patient-search] response)
         (dissoc :patient-search-results))))
 
+(reg-event-fx
+  :patient/show
+  [check-spec-interceptor]
+  (fn [{db :db} [_ patient]]
+    (js/console.log "Patient selected:" patient)
+    {:db (assoc db :current-patient patient)
+     :dispatch [::set-active-panel :patient-panel]
+     }))
 
 (reg-event-fx
   :concierge/resolve-identifier
@@ -412,10 +417,4 @@
     db/default-db
     ))
 
-
-
- ;;   (-> db
- ;;       (dissoc :authenticated-user)
- ;;       (dissoc :patient-search-results)
- ;;       (dissoc :errors))))
 
