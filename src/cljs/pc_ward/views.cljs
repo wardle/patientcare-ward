@@ -324,18 +324,11 @@
 (defn form-early-warning-score
   [save-func]
   (let [results (reagent/atom nil)
-        drawing-start-date (reagent/atom (time-core/date-time 2020 3 24))]
+        ]
     (fn [value]
       [:div
 
-       [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
-       [:div
-        [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 7))))} " << "]
-        [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 1))))} " < "]
-        [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 1))))} " > "]
-        [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]]
-
-       [news/test-drawing @drawing-start-date]
+       ;;   [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
 
        [respiratory-rate results [:resp-rate]]
        [oxygen-saturations results [:o2-sats]]
@@ -589,6 +582,20 @@
 
        ])))
 
+(defn togglable-panel
+  "Creates a togglable panel with the specified title and whether to be open or closed by default, wrapping the specified content"
+  [title show content]
+  (let [show-panel (reagent/atom show)]
+    (fn []
+      [:div.card
+       [:header.card-header
+        [:p.card-header-title {:on-click #(swap! show-panel not)} title]
+        [:a.card-header-icon {:aria-label "more options"}
+         [:span.icon {:on-click #(swap! show-panel not)}
+          (if @show-panel [:i.fas.fa-angle-down {:aria-hidden "true"}] [:i.fas.fa-angle-right {:aria-hidden "true"}])]]]
+       (when @show-panel
+         [:div.card-content
+          [:div.content content]])])))
 
 
 
@@ -611,7 +618,7 @@
             [:aside.menu
              [:p.menu-label "Overview"]
              [:ul.menu-list
-              [:li [:a.is-active "Current status"]]
+              [:li [:a.is-active "Record observations"]]
               [:li [:a {:on-click #(reset! show-news-chart? true)} "NEWS chart"]]]
              [:p.menu-label "Active episodes"]
              [:ul.menu-list
@@ -620,6 +627,25 @@
               [:li [:a "General cardiology"]]]
              ]
 
+            ]
+           [:div.column
+
+            [togglable-panel "National Early Warning Score" false
+             [form-early-warning-score #()]
+             ]
+            [:hr]
+            [togglable-panel "Glasgow coma scale" false
+             [:div "Yo ho ho and a bottle of rum"]]
+            [:hr]
+            [togglable-panel "Problems / diagnoses" false
+             [:div "Yo ho ho and a bottle of rum"]]
+            [:hr]
+            [togglable-panel "Notes" false
+             [:div "Yo ho ho and a bottle of rum"]]
+
+           [:hr]
+           [togglable-panel "Standing orders" false
+             [:div "Yo ho ho and a bottle of rum"]]
             ]
 
            ]
@@ -631,7 +657,7 @@
          [:div.box
           [patient-banner @patient]
           ]
-          [:div.buttons.is-centered
+         [:div.buttons.is-centered
           [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 7))))} " << "]
           [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 1))))} " < "]
           [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 1))))} " > "]
