@@ -56,7 +56,7 @@
   "Determines whether the patient is deceased or not.
   HL7 FHIR defines two ways of recording whether a patient is deceased, either as a boolean or a date"
   [patient]
-  (or (:deceasedBoolean patient) (not (clojure.string/blank? (:deceasedDate patient)))))
+  (or (:deceased-boolean patient) (not (clojure.string/blank? (:deceased-date patient)))))
 
 (defn parse-date
   "Parses a date from JSON "
@@ -81,7 +81,7 @@
 (defn format-patient-age
   "A printable representation of the age of a patient"
   [patient]
-  (let [age (time-core/interval (parse-date (:birthDate patient)) (time-core/now))
+  (let [age (time-core/interval (parse-date (:birth-date patient)) (time-core/now))
         years (time-core/in-years age)
         months (time-core/in-months age)]
     (cond

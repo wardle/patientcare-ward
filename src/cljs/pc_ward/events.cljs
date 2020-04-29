@@ -3,11 +3,13 @@
     [re-frame.core :refer [reg-event-db reg-event-fx inject-cofx path after dispatch reg-fx]]
     [day8.re-frame.http-fx]                                 ;; required for its side-effects in registering a re-frame "effect"
     [ajax.core :as ajax]
+    [ajax.json :as ajax-json]
     [cljs.spec.alpha :as s]
     [pc-ward.db :as db]
     [pc-ward.config :as config]
     [pc-ward.concierge :as concierge]
     [pc-ward.util :as util]
+    [camel-snake-kebab.core :as csk]
     [clojure.string :as string]))
 
 (defn check-and-throw
@@ -19,6 +21,25 @@
 ;; now we create an interceptor using `after`
 (def check-spec-interceptor (after (partial check-and-throw :pc-ward.db/db)))
 
+(defn ->kebab
+  "Converts keywords to kebab case"
+  [form]
+  (let [f (fn [[k v]] [(csk/->kebab-case-keyword k) v])]    ;; destructure the key-value pair and then pass back converted version
+    (clojure.walk/postwalk (fn [x]
+                             (if (map? x) (into {} (map f x)) x)) form)))
+
+(defn read-json-kebab [raw _ text]
+  "Replaces cljs-ajax's read-json-native with one that keywordizes and kebabs keys by default"
+  (let [result-raw (.parse js/JSON text)]
+    (if raw
+      result-raw
+      (->kebab (js->clj result-raw)))))
+  ;;    (->kebab (js->clj result-raw :keywordize-keys keywords?)))))
+
+(defn kebab-json-response-format
+  "Replaces cljs-ajax's json-response-format to handle camelcase->kebabcase"
+  []
+  ((ajax-json/make-json-response-format read-json-kebab) {:keywords? true}))
 
 ;; initialisation of "database"
 (reg-event-db
@@ -122,7 +143,7 @@
 
                                     :password password}
 
-                  :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
+                  :response-format (kebab-json-response-format)
                   :on-success      [:user/user-login-success namespace username]
                   :on-failure      [:user/user-login-failure]}}))
 
@@ -138,7 +159,7 @@
                   :headers         {:Authorization (str "Bearer " (get-in db [:authenticated-user :token]))}
                   :timeout         5000                     ;; optional see API docs
                   :format          (ajax/json-request-format)
-                  :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
+                  :response-format (kebab-json-response-format)
                   :on-success      [:user/user-login-success namespace username]
                   :on-failure      [:user/session-expired]}}))
 
@@ -195,7 +216,7 @@
                       :uri             (str config/terminology-server-address "/v1/snomed/concepts/" concept-id "/extended")
                       :timeout         5000
                       :format          (ajax/json-request-format)
-                      :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
+                      :response-format (kebab-json-response-format)
                       :on-success      [:snomed/get-concept-success concept-id]
                       :on-failure      [:snomed/get-concept-failure concept-id]}}
         {}))))
@@ -204,7 +225,7 @@
   :snomed/get-concept-success
   [check-spec-interceptor]
   (fn [db [_ concept-id response]]
-    (assoc-in db [:snomed :concepts concept-id] response)))
+    (assoc-in db [:snomed :concepts concept-id] (->kebab response))))
 
 
 (reg-event-db
@@ -236,7 +257,7 @@
                                           :params          {:s            s
                                                             :is_a         is-a
                                                             :maximum_hits max-hits}
-                                          :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
+                                          :response-format (kebab-json-response-format)
                                           :on-success      [:snomed/search-success id]
                                           :on-failure      [:snomed/search-failure id]})))))
 
@@ -246,7 +267,7 @@
   (fn [db [_ id response]]
     (-> db
         (update-in [:snomed id] dissoc :error)
-        (assoc-in [:snomed id :results] (:items response)))))
+        (assoc-in [:snomed id :results] (->kebab (:items response))))))
 
 (reg-event-db
   :snomed/search-failure
@@ -304,7 +325,7 @@
   [check-spec-interceptor]
   (fn [{db :db} [_ patient]]
     (js/console.log "Patient selected:" patient)
-    {:db (assoc db :current-patient patient)
+    {:db       (assoc db :current-patient patient)
      :dispatch [::set-active-panel :patient-panel]
      }))
 
@@ -318,7 +339,7 @@
                   :format          (ajax/json-request-format)
                   :headers         {:Authorization (str "Bearer " (get-in db [:authenticated-user :token]))}
                   :params          {:system system}
-                  :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
+                  :response-format (kebab-json-response-format)
                   :on-success      [on-success]
                   :on-failure      [on-failure]}}))
 
@@ -336,7 +357,7 @@
 
                                   :password config/patientcare-service-secret}
 
-                :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
+                :response-format (kebab-json-response-format)
                 :on-success      [:user/service-login-success next-event]
                 :on-failure      [:user/service-login-failure]}})
 
@@ -348,7 +369,7 @@
                 :headers         {:Authorization (str "Bearer " (:concierge-service-token db))}
                 :timeout         5000                       ;; optional see API docs
                 :format          (ajax/json-request-format)
-                :response-format (ajax/json-response-format {:keywords? true}) ;; IMPORTANT!: You must provide this.
+                :response-format (kebab-json-response-format)
                 :on-success      [:user/service-login-success next-event]
                 :on-failure      [:user/service-login-refresh-failure]}})
 

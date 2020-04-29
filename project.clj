@@ -10,6 +10,7 @@
                  [day8.re-frame/http-fx "v0.2.0"]
                  [secretary "1.2.3"]
                  [com.andrewmcveigh/cljs-time "0.5.2"]
+                 [camel-snake-kebab "0.4.1"]
                  [garden "1.3.9"]
                  [ns-tracker "0.4.0"]]
 

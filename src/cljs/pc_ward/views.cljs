@@ -134,7 +134,7 @@
          [:p.panel-heading
           (if loading
             "Loading..."
-            [:span (get-in @concept [:preferred_description :term])
+            [:span (get-in @concept [:preferred-description :term])
              (if-not (get-in @concept [:concept :active]) [:span.tag.is-danger "Inactive"])])]
 
          (if (and (not has-inactive) (= @active-panel :inactive-synonyms)) (reset! active-panel :active-synonyms))
@@ -148,13 +148,13 @@
 
          (if loading
            [:p.panel-block.is-size-7 "Loading..."]
-           (let [preferred-id (get-in @concept [:preferred_description :id])]
+           (let [preferred-id (get-in @concept [:preferred-description :id])]
              (doall (->> (sort-by :term (:descriptions @concept))
                          (filter #(case @active-panel
                                     :active-synonyms (:active %)
                                     :inactive-synonyms (not (:active %))
                                     :preferred-synonyms (= preferred-id (:id %))))
-                         (filter #(not= (:type_id %) config/sct-fully-specified-name)) ;; exclude fully specified names
+                         (filter #(not= (:type-id %) config/sct-fully-specified-name)) ;; exclude fully specified names
                          (map #(vector
                                  :p.panel-block.is-size-7 {:key (:id %)}
                                  (if (and (not= @active-panel :preferred-synonyms) (= preferred-id (:id %)))
@@ -179,7 +179,7 @@
         results (rf/subscribe [:snomed/results id])]
     (fn [v kp props]
       (when (and (= 0 @selected-index) (> (count @results) 0)) ;; handle special case of typing in search to ensure we start fetching first result
-        (rf/dispatch [:snomed/get-concept (:concept_id (first @results))]))
+        (rf/dispatch [:snomed/get-concept (:concept-id (first @results))]))
       [:div
        [:div.field
         [:label.label name]
@@ -195,19 +195,16 @@
         [:div.select.is-multiple.is-fullwidth {:style {:height (str 10 "em")}}
          [:select {:multiple  true :size 4
                    :value     (vector @selected-index)
-                   :on-set    #(let [val (int (-> % (.-target) (.-value)))
-                                     item (nth @results val)]
-                                 (rf/dispatch [:snomed/get-concept (:concept_id item)]))
                    :on-change #(let [val (int (-> % (.-target) (.-value)))
                                      item (nth @results val)]
-                                 (rf/dispatch [:snomed/get-concept (:concept_id item)])
+                                 (rf/dispatch [:snomed/get-concept (:concept-id item)])
                                  (reset! selected-index val))}
           (doall (map-indexed (fn [index item] [:option {:key index :value index} (:term item)]) @results))]]
 
 
         ;; if we have a selected result, show it
         (if (and (> (count @results) 0) (not (nil? @selected-index)))
-          [snomed-show-concept (:concept_id (nth @results @selected-index))])]])))
+          [snomed-show-concept (:concept-id (nth @results @selected-index))])]])))
 
 
 
@@ -328,7 +325,7 @@
     (fn [value]
       [:div
 
-       ;;   [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
+         [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
 
        [respiratory-rate results [:resp-rate]]
        [oxygen-saturations results [:o2-sats]]
@@ -416,8 +413,8 @@
   "Nicely displays a patient name"
   [patient]
   [:<>
-   (when (concierge/patient-deceased? patient) [:div.tag "Deceased"])
-   [:div (clojure.string/join " " [(:title patient) (:firstnames patient) (:lastname patient)])]])
+   (when (concierge/patient-deceased? patient) "Deceased")
+   (clojure.string/join " " [(:title patient) (:firstnames patient) (:lastname patient)])])
 
 (defn show-patient
   [patient confirm-func cancel-func]
@@ -436,11 +433,11 @@
            [:tbody
             (when-not (nil? nnn)
               [:tr [:th "NHS number: "] [:td (format-nhs-number nnn)]])
-            [:tr [:th "Date of birth:"] [:td (concierge/format-date (concierge/parse-date (:birthDate patient)))]]
+            [:tr [:th "Date of birth:"] [:td (concierge/format-date (concierge/parse-date (:birth-date patient)))]]
             (let [address (first (concierge/active-addresses (:addresses patient) (time-core/now)))]
               [:tr
                [:th "Address:"]
-               [:td (:address1 address) [:br] (:address2 address) [:br] (:address3 address) [:br] (:postcode address) [:br] (:country address)]]
+               [:td (:address-1 address) [:br] (:address-2 address) [:br] (:address-3 address) [:br] (:postcode address) [:br] (:country address)]]
               )
             ]]
           ]
@@ -450,8 +447,8 @@
             [:tr [:th "Hospital number:"] [:td (first (concierge/identifiers-for-system patient (:cardiff-pas concierge/systems)))]]
             (cond
               (not (concierge/patient-deceased? patient)) [:tr [:th "Current age:"] [:td (concierge/format-patient-age patient)]]
-              (string/blank? (:deceasedDate patient)) [:tr [:th "Deceased:"] [:td "Yes"]]
-              :else [:tr [:th "Date of death:"] [:td (concierge/format-date (concierge/parse-date (:deceasedDate patient)))]]
+              (string/blank? (:deceased-date patient)) [:tr [:th "Deceased:"] [:td "Yes"]]
+              :else [:tr [:th "Date of death:"] [:td (concierge/format-date (concierge/parse-date (:deceased-date patient)))]]
               )
             (if (> (count (:telephones patient)) 0)
               (do [:tr [:th "Telephone:"]
@@ -573,7 +570,7 @@
        (if (concierge/patient-deceased? patient)
          [:div.column.is-narrow [:span.tag "Deceased"]]
          [:div.column.is-narrow
-          (concierge/format-date (concierge/parse-date (:birthDate patient))) ": "
+          (concierge/format-date (concierge/parse-date (:birth-date patient))) ": "
           (concierge/format-patient-age patient)])
        (when-not (nil? nnn) [:div.column.is-narrow [:strong (format-nhs-number nnn)]])
        (when-not (nil? cav-crn) [:div.column.is-narrow cav-crn])
