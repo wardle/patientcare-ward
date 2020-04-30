@@ -661,9 +661,7 @@
           [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]
           ]
          [news/test-drawing @drawing-start-date news-data]]
-        [:button.modal-close.is-large {:aria-label "close" :on-click #(reset! show-news-chart? false)}]
-
-        ]])))
+        [:button.modal-close.is-large {:aria-label "close" :on-click #(reset! show-news-chart? false)}]]])))
 
 
 
@@ -689,19 +687,18 @@
     :patient-panel [patient-panel]
     [:div]))
 
+
 (defn show-panel [panel-name]
   [panels panel-name])
 
-;;
-(defn main-panel []
+(defn main-page []
+  "The main page; ensures we have an authenticated user and shows a login page if not"
   (let [authenticated-user (rf/subscribe [:user/authenticated-user])
         active-panel (rf/subscribe [::subs/active-panel])]
-    (fn []
-      (if (nil? @authenticated-user)
-        (do
-          [rf/dispatch [:pc-ward.events/set-active-panel :login]]
-          [login-panel])
-
-        [show-panel @active-panel]))))
+    (fn [] (if (nil? @authenticated-user)
+             (do
+               [rf/dispatch [:pc-ward.events/set-active-panel :login]]
+               [login-panel])
+             [show-panel @active-panel]))))
 
 
