@@ -68,6 +68,11 @@
   [date]
   (if (nil? date) "" (time-format/unparse (time-format/formatter "dd MMM yyyy") date)))
 
+(defn format-date-time
+  "Formats a date as 'dd MMM yyyy HH:MM:SS"
+  [date-time]
+  (if (nil? date-time) "" (time-format/unparse (time-format/formatter "dd MMM yyyy HH:MM:ss") date-time)))
+
 (defn age-in-years
   "Calculates the age of a patient"
   [date-birth]

@@ -50,11 +50,9 @@
              [:div.control
               [:input.input {:id          "login-pw" :type "password" :placeholder "Enter password" :required true
                              :disabled    @submitting
-                             :on-key-down #(if (= 13 (.-which %)) (do
-                                                                    (reset! password (-> % .-target .-value))
-                                                                    (doLogin)))
+                             :on-key-down #(if (= 13 (.-which %))
+                                             (do (reset! password (-> % .-target .-value)) (doLogin)))
                              :on-change   #(reset! password (-> % .-target .-value))}]]]
-
 
             [:button.button {:class    ["is-primary" (when @submitting "is-loading")]
                              :disabled @submitting
@@ -248,7 +246,6 @@
 
 
 
-
 (defn respiratory-rate
   "Component to record respiratory rate, with result pushed to atom (v) using key path (kp) (a vector of keys)"
   [v kp]
@@ -282,18 +279,59 @@
           [:a.button.is-info {:on-click #(swap! timer update-in [:breaths] inc)} "Count breath"]
           [:a.button.is-danger {:on-click stop-timer} "Stop timer"]]]))))
 
+(defn show-patient-name
+  "Nicely displays a patient name"
+  [patient]
+  [:<>
+   (when (concierge/patient-deceased? patient) "Deceased")
+   (clojure.string/join " " [(:title patient) (:firstnames patient) (:lastname patient)])])
 
 
+(defn format-nhs-number
+  "Formats an NHS number into the standard (3) (3) (4) pattern"
+  [nnn]
+  (apply str (remove nil? (interleave nnn [nil nil " " nil nil " ", nil nil nil nil]))))
+
+
+(defn patient-banner
+  "Show a patient banner, options can include :wide to include patient address"
+  [patient opts]
+  (fn []
+    (let [nnn (first (concierge/identifiers-for-system patient (:nhs-number concierge/systems)))
+          address (first (concierge/active-addresses (:addresses patient)))
+          cav-crn (first (concierge/identifiers-for-system patient (:cardiff-pas concierge/systems)))]
+      [:div.columns
+       [:div.column.is-narrow [:strong [show-patient-name patient]]]
+       (if (concierge/patient-deceased? patient)
+         [:div.column.is-narrow [:span.tag "Deceased"]]
+         [:div.column.is-narrow
+          (concierge/format-date (concierge/parse-date (:birth-date patient))) ": "
+          (concierge/format-patient-age patient)])
+       (when-not (nil? nnn) [:div.column.is-narrow [:strong (format-nhs-number nnn)]])
+       (when-not (nil? cav-crn) [:div.column.is-narrow cav-crn])
+       (when (:wide opts)
+         [:div.column.has-text-right (str/join ", " [(:address-1 address) (:address-2 address) (:address-3 address) (:postcode address)])])
+
+       ])))
 
 
 
 (def news-data [
-                {:date-time      (time-core/date-time 2020 4 9 9 3 27) :respiratory-rate 12 :pulse-rate 110
-                 :blood-pressure {:systolic 138 :diastolic 82}}
-                {:date-time      (time-core/date-time 2020 4 9 15 3 27) :respiratory-rate 14 :pulse-rate 90
-                 :blood-pressure {:systolic 142 :diastolic 70}}
+                {:date-time        (time-core/date-time 2020 4 9 9 3 27)
+                 :respiratory-rate 12 :pulse-rate 110 :blood-pressure {:systolic 82 :diastolic 54}}
+                {:date-time        (time-core/date-time 2020 4 9 15 3 27)
+                 :respiratory-rate 14 :pulse-rate 90 :blood-pressure {:systolic 142 :diastolic 70}}
+                {:date-time        (time-core/date-time 2020 4 12 9 3 27)
+                 :respiratory-rate 10 :pulse-rate 82 :temperature 39.5
+                 :spO2             98 :air-or-oxygen :air
+                 :blood-pressure   {:systolic 120 :diastolic 90}
+                 :consciousness    :clin/alert}
 
-                {:date-time (time-core/date-time 2020 4 12 9 3 27) :respiratory-rate 10 :pulse-rate 82 :temperature 39.5}
+                {:date-time        (time-core/date-time 2020 4 12 11 3 27)
+                 :respiratory-rate 10 :pulse-rate 82 :temperature 39.5
+                 :spO2             70 :air-or-oxygen :air
+                 :blood-pressure   {:systolic 90 :diastolic 60}
+                 :consciousness    :clin/confused}
 
                 {:date-time (time-core/date-time 2020 4 14 9 3 27) :respiratory-rate 22, :spO2 94 :consciousness :clin/alert}
                 {:date-time (time-core/date-time 2020 4 14 17 3 27) :respiratory-rate 22 :spO2 98 :conscioussness :clin/alert}
@@ -304,18 +342,55 @@
                 {:date-time (time-core/date-time 2020 4 18 9 2 45) :respiratory-rate 28 :pulse-rate 90}
                 {:date-time (time-core/date-time 2020 4 18 12 2 45) :respiratory-rate 23 :pulse-rate 110}
                 {:date-time (time-core/date-time 2020 4 18 19 2 45) :respiratory-rate 8 :consciousness :clin/alert}
-                {:date-time (time-core/date-time 2020 4 8 22 2 45) :respiratory-rate 14 :pulse-rate 120 :spO2 92}
+                {:date-time (time-core/date-time 2020 4 8 22 2 45) :respiratory-rate 14 :pulse-rate 120 :spO2 95 :air-or-oxygen :O2}
                 {:date-time (time-core/date-time 2020 4 8 10 2 45) :respiratory-rate 12 :pulse-rate 140}
                 {:date-time      (time-core/date-time 2020 4 7 9 2 45) :respiratory-rate 22 :pulse-rate 90 :spO2 88 :consciousness :clin/confused
                  :blood-pressure {:systolic 201 :diastolic 110}}
                 {:date-time (time-core/date-time 2020 4 6 11 2 45) :respiratory-rate 12}
                 {:date-time (time-core/date-time 2020 4 5 11 2 45) :respiratory-rate 12 :temperature 37.2}
                 {:date-time (time-core/date-time 2020 4 4 11 2 45) :respiratory-rate 12 :consciousness :clin/unresponsive}
-                {:date-time (time-core/date-time 2020 4 19 9 2 45) :respiratory-rate 12 :consciousness :clin/alert :pulse-rate 95 :temperature 37.2}])
+                {:date-time (time-core/date-time 2020 4 19 9 2 45) :respiratory-rate 12 :consciousness :clin/alert :pulse-rate 95 :temperature 37.2}
+                {:date-time (time-core/date-time 2020 5 6 9 11 12) :respiratory-rate 12 :consciousness :clin/unresponsive}
+                {:date-time (time-core/date-time 2020 5 8 18 11 12) :respiratory-rate 12 :consciousness :clin/alert :spO2 92
+                 :air-or-oxygen :air :pulse-rate 98 :blood-pressure {:systolic 120 :diastolic 80} :temperature 37}
+                ])
 
 
 
+(defn render-data
+  "Simple rendering of the NEWS data as a table. In time, this will evolve to a generic
+  view encounters within an episode / across multiple episodes."
+  [patient]
+  (let [show-news-chart? (reagent/atom false)
+        drawing-start-date (reagent/atom (time-core/minus (time-core/now) (time-core/days 27)))]
+    (fn []
+      (let [sorted-data (sort-by :date-time #(time-core/after? %1 %2) news-data)]
+        [:<>
+         [:table.table.is-striped.is-full-width
+          [:thead
+           [:tr [:th " Date / time" [:span.icon.is-small.is-left [:i.fas.fa-angle-down]]]
+            [:th "RR"] [:th "% O" [:sub "2"] ""] [:th "P"] [:th "BP"] [:th "Con"] [:th "T ºC"]
+            [:th "NEWS"]]]
+          [:tbody
+           (doall (for [x sorted-data]
+                    [:tr [:td (concierge/format-date-time (:date-time x))]
+                     [:td (:respiratory-rate x)]
+                     [:td (:spO2 x)]
+                     [:td (:pulse-rate x)]
+                     [:td (if-not (nil? (:blood-pressure x)) (str (get-in x [:blood-pressure :systolic]) "/" (get-in x [:blood-pressure :diastolic])))]
+                     [:td (string/capitalize (name (get x :consciousness "")))]
+                     [:td (:temperature x)]
+                     [:td]]))
+           [:tr [:td "1/5/2020 1414"] [:td "23"] [:td "92% (air)"] [:td "120"] [:td "145/90"] [:td "Alert"] [:td "1"]]
+           ]]
+         ]))))
 
+
+;; (doall (map #(let [x (+ 56 (calculate-x-for-scale start-date (:date-time %) scale))
+;                        y (+ 2.5 (* 5 ((:indexed-by chart) (get % value-key) (:categories chart))))]
+;                    (vector
+;                      :circle {:cx (+ 3.5 x) :cy (+ start-y y) :r "0.2" :stroke "black" :fill "black" :key (:date-time %)})
+;                    ) sorted-data))
 
 
 (defn form-early-warning-score
@@ -325,7 +400,7 @@
     (fn [value]
       [:div
 
-         [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
+       ;;  [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
 
        [respiratory-rate results [:resp-rate]]
        [oxygen-saturations results [:o2-sats]]
@@ -381,11 +456,6 @@
      [:p [:strong "To get started, type in a hospital number in the search box"]]]]])
 
 
-(defn format-nhs-number
-  "Formats an NHS number into the standard (3) (3) (4) pattern"
-  [nnn]
-  (apply str (remove nil? (interleave nnn [nil nil " " nil nil " ", nil nil nil nil]))))
-
 
 
 
@@ -409,12 +479,6 @@
 ;;       ])))
 ;  )
 
-(defn show-patient-name
-  "Nicely displays a patient name"
-  [patient]
-  [:<>
-   (when (concierge/patient-deceased? patient) "Deceased")
-   (clojure.string/join " " [(:title patient) (:firstnames patient) (:lastname patient)])])
 
 (defn show-patient
   [patient confirm-func cancel-func]
@@ -474,7 +538,6 @@
       (set-hash! "/home")
       [:<>
        [nav-bar]
-
        [:section.section
         [:div.container
          [:div.columns
@@ -558,26 +621,7 @@
 
 
 
-(defn patient-banner
-  "Show a patient banner, options can include :wide to include patient address"
-  [patient opts]
-  (fn []
-    (let [nnn (first (concierge/identifiers-for-system patient (:nhs-number concierge/systems)))
-          address (first (concierge/active-addresses (:addresses patient)))
-          cav-crn (first (concierge/identifiers-for-system patient (:cardiff-pas concierge/systems)))]
-      [:div.columns
-       [:div.column.is-narrow [:strong [show-patient-name patient]]]
-       (if (concierge/patient-deceased? patient)
-         [:div.column.is-narrow [:span.tag "Deceased"]]
-         [:div.column.is-narrow
-          (concierge/format-date (concierge/parse-date (:birth-date patient))) ": "
-          (concierge/format-patient-age patient)])
-       (when-not (nil? nnn) [:div.column.is-narrow [:strong (format-nhs-number nnn)]])
-       (when-not (nil? cav-crn) [:div.column.is-narrow cav-crn])
-       (when (:wide opts)
-         [:div.column.has-text-right (str/join ", " [(:address1 address) (:address2 address) (:address3 address) (:postcode address)])])
 
-       ])))
 
 (defn togglable-panel
   "Creates a togglable panel with the specified title and whether to be open or closed by default, wrapping the specified content"
@@ -595,73 +639,101 @@
           [:div.content content]])])))
 
 
-
 (defn patient-panel []
   (let [patient (rf/subscribe [:patient/current])
-        drawing-start-date (reagent/atom (time-core/minus (time-core/now) (time-core/days 27)))
-        show-news-chart? (reagent/atom false)]
+        selected-tab (reagent/atom :chart)
+        scale (reagent/atom :consecutive)
+        drawing-start-date (reagent/atom (news/default-start-date @scale 28 news-data))
+        hypercapnic? (reagent/atom true)]
     (fn []
       (set-hash! "/patient")
       [:<>
-       (js/console.log "show modal: " @show-news-chart?)
        [nav-bar]
        [:section.section
         [:div.container
          [:div.box
           [patient-banner @patient #{:wide}]
           [:hr]
-          [:div.columns
-           [:div.column.is-3
-            [:aside.menu
-             [:p.menu-label "Overview"]
-             [:ul.menu-list
-              [:li [:a.is-active "Record observations"]]
-              [:li [:a {:on-click #(reset! show-news-chart? true)} "NEWS chart"]]]
-             [:p.menu-label "Active episodes"]
-             [:ul.menu-list
-              [:li [:a "Inpatient - ward C6"]]
-              [:li [:a "Helen Durham neuro-inflammatory unit"]]
-              [:li [:a "General cardiology"]]]
-             ]
-
-            ]
-           [:div.column
-
-            [togglable-panel "National Early Warning Score" false
-             [form-early-warning-score #()]
-             ]
-            [:hr]
-            [togglable-panel "Glasgow coma scale" false
-             [:div "Yo ho ho and a bottle of rum"]]
-            [:hr]
-            [togglable-panel "Problems / diagnoses" false
-             [:div "Yo ho ho and a bottle of rum"]]
-            [:hr]
-            [togglable-panel "Notes" false
-             [:div "Yo ho ho and a bottle of rum"]]
-
-           [:hr]
-           [togglable-panel "Standing orders" false
-             [:div "Yo ho ho and a bottle of rum"]]
+          [:div.tabs.is-boxed
+           [:ul
+            [:li {:class (if (= :data @selected-tab) "is-active")} [:a {:on-click #(reset! selected-tab :data)} "NEWS"]]
+            [:li {:class (if (= :chart @selected-tab) "is-active")} [:a {:on-click #(reset! selected-tab :chart)} "Chart"]]
+            [:li {:class (if (= :add @selected-tab) "is-active")} [:a {:on-click #(reset! selected-tab :add)} "Add"]]
             ]
 
            ]
+          (cond
+            (= :data @selected-tab)
+            [render-data @patient]
+            (= :chart @selected-tab)
+            [:<>
+            [:nav.level
+             [:div.level-left
+             [:div.buttons.is-centered
+              [:div.tabs.is-toggle
+               [:ul
+                [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 7))))} " << "]]
+                [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 1))))} " < "]]
+                [:li (if (= @scale :days) {:class "is-active"})
+                 [:a {:on-click #(reset! scale :days)}
+                  [:span "By day"]]]
+                [:li (if (= @scale :consecutive) {:class "is-active"})
+                 [:a {:on-click #(reset! scale :consecutive)}
+                  [:span "Consecutive"]]]
+                [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 1))))} " > "]]
+                [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]]
+                ]]
+              ]]
+             [:div.level-right
+              [:label.checkbox
+               [:input {:type "checkbox" :checked @hypercapnic? :on-click #(swap! hypercapnic? not)} ] "Hypercapnic respiratory failure"]]]
+             [news/render-news-chart {:scale @scale} @drawing-start-date news-data @hypercapnic?]
+             ]
+            (= :add @selected-tab)
+            [form-early-warning-score #()]
+            :else [:div])
+
+          (comment
+            [:div.columns
+             [:div.column.is-3
+              [:aside.menu
+               [:p.menu-label "Overview"]
+               [:ul.menu-list
+                [:li [:a.is-active "Record observations"]]
+                [:li [:a "NEWS chart"]]]
+               [:p.menu-label "Active episodes"]
+               [:ul.menu-list
+                [:li [:a "Inpatient - ward C6"]]
+                [:li [:a "Helen Durham neuro-inflammatory unit"]]
+                [:li [:a "General cardiology"]]]
+               ]
+
+              ]
+             [:div.column
+
+              [togglable-panel "National Early Warning Score" false
+               [form-early-warning-score #()]
+               ]
+              [:hr]
+              [togglable-panel "Glasgow coma scale" false
+               [:div "Yo ho ho and a bottle of rum"]]
+              [:hr]
+              [togglable-panel "Problems / diagnoses" false
+               [:div "Yo ho ho and a bottle of rum"]]
+              [:hr]
+              [togglable-panel "Notes" false
+               [:div "Yo ho ho and a bottle of rum"]]
+
+              [:hr]
+              [togglable-panel "Standing orders" false
+               [:div "Yo ho ho and a bottle of rum"]]
+              ]
+
+             ]
+            )
           ]]]
 
-       [:div.modal (when @show-news-chart? {:class "is-active"})
-        [:div.modal-background {:on-click #(reset! show-news-chart? false)}]
-        [:div.modal-content.has-background-white
-         [:div.box
-          [patient-banner @patient]
-          ]
-         [:div.buttons.is-centered
-          [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 7))))} " << "]
-          [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 1))))} " < "]
-          [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 1))))} " > "]
-          [:button.button {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]
-          ]
-         [news/test-drawing @drawing-start-date news-data]]
-        [:button.modal-close.is-large {:aria-label "close" :on-click #(reset! show-news-chart? false)}]]])))
+       ])))
 
 
 
