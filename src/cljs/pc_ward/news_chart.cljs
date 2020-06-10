@@ -394,12 +394,19 @@
                                    dbp (get-in % [:blood-pressure :y-dbp])
                                    diastolic (if (nil? dbp) (+ systolic 0.2) (+ 2.5 (* 5 dbp)))
                                    ]
-                               (when-not (nil? v) (vector
-                                                    :polyline {:points [(+ 3.5 x) (+ start-y systolic) (+ 3.5 x) (+ start-y diastolic)]
-                                                               :key v
-                                                               :fill   "none" :stroke "black" :stroke-width 0.4 :marker-start "url(#arrow)"
-                                                               :marker-end (if (nil? dbp) "" "url(#arrow)" )}
-                                                    ))) data)))])
+                               (when-not (nil? v) [:<> (vector
+                                                         :polyline {:points     [(+ 3.5 x) (+ start-y systolic 0.7) (+ 3.5 x) (+ start-y -0.7 diastolic)]
+                                                                    :key        %
+                                                                    :fill       "none" :stroke "black" :stroke-width 0.4
+                                                                    :marker-start "url(#circle)"
+                                                                    :marker-mid (if (nil? dbp) "" "url(#circle)")
+                                                                    :marker-end (if (nil? dbp) "" "url(#circle)")})
+                                                   (vector
+                                                     :text {:x    (+ 3.5 x) :y (+ -0.1 start-y systolic) :text-anchor "middle"
+                                                            :fill "black" :font-size 3} (get-in % [:results :blood-pressure :systolic]))
+                                                   [:text {:x    (+ 3.5 x) :y (+ 2.1 start-y diastolic) :text-anchor "middle"
+                                                           :fill "black" :font-size 3} (get-in % [:results :blood-pressure :diastolic])]
+                                                   ])) data)))])
 
 (def default-chart-configuration
   {:box-width           7                                   ;; the viewbox is based on the paper NEWS chart in millimetres, so our internal scale is same as "millimetres"
@@ -434,6 +441,8 @@
      [:rect {:width 14 :height 5 :fill "white" :stroke "black" :stroke-width 0.1}]]
     [:marker#arrow {:viewBox "0 0 10 10" :refX "5" :refY "5" :markerWidth "6" :markerHeight "6" :orient "auto-start-reverse"}
      [:path {:d "M 0 0 L 10 5 L 0 10 z"}]]
+    [:marker#circle {:markerWidth "6" :markerHeight "6" :refX "5" :refY "5"}
+     [:circle {:cx "5" :cy "5" :r "1"}]]
     ] c])
 
 
