@@ -6,14 +6,14 @@
     [cljs-time.core :as time-core]
     [cljs-time.predicates]
     [cljs-time.extend]                                      ;; this import is needed so that equality for date/time works properly....
-
+    [clojure.spec.alpha :as s]
     [pc-ward.config :as config]
     [pc-ward.subs :as subs]
     [pc-ward.clinical :as clin]
     [pc-ward.concierge :as concierge]
     [pc-ward.news-chart :as news]
-    [clojure.string :as str]))
-
+    [clojure.string :as str])
+  )
 
 (defn set-hash! [loc]
   (set! (.-hash js/window.location) loc))
@@ -163,6 +163,15 @@
           [:button.button.is-link.is-outlined.is-fullwidth "Save"]]]))))
 
 
+(defn kp->path
+  "Converts a key path such as [:patient.last-name] to a path [:patient :last-name]"
+  [kp]
+  (if (sequential? kp)
+    kp
+    (let [segments (str/split (subs (str kp) 1) #"\.")]
+      (mapv keyword segments))))
+
+
 (defn snomed-autocomplete
   "Display a SNOMED CT autocompletion box"
   [v kp {id     :id                                         ;; id (e.g. ::new-diagnosis)
@@ -208,76 +217,183 @@
 
 
 
-(defn form-textfield
-  [v kp name help]
+(defn form-number-field
+  [v kp & {:keys [placeholder size errors]}]
   {:pre [(vector? kp)]}
-  (fn [v kp name help]
-    [:div.field
-     [:label.label name]
-     [:div.control
-      [:input.input {:type      "text" :placeholder name
-                     :value     (get-in @v kp)
-                     :on-change #(swap! v assoc-in kp (-> % .-target .-value))}]]
-     (if-not (clojure.string/blank? help) [:p.help help])]))
+  [:div.control
+   [:input.input
+    (merge {:type      "number" :placeholder placeholder
+            :value     (get-in @v kp)
+            :on-change #(swap! v assoc-in kp (-> % .-target .-valueAsNumber))}
+           (when-not (nil? size) {:size size})
+           (if (contains? errors kp) {:class :is-danger})
+           )]])
 
+
+(defn form-select
+  "Renders a HTML SELECT component
+  :v where to store results (e.g. a map)
+  :kp keypath under which to store results (e.g. [:fiO2])
+  :options a sequence of options
+  :display-key function to derive display from each option
+  :value-key function to derive a key for each option"
+  [& {:keys [v kp options display-key value-key no-selection-string errors]}]
+  (let [value-map (apply merge (map #(hash-map (clj->js (value-key %)) %) options))]
+    (when (and (nil? (get-in @v kp)) (not no-selection-string))
+      (swap! v assoc-in kp (first options)))
+    [:div.control
+     [:div.select {:class (if (contains? errors kp) :is-danger)}
+      [:select {:on-change #(swap! v assoc-in kp (get value-map (-> % .-target .-value)))}
+       (when no-selection-string
+         [:option {:value ""} no-selection-string])
+       (doall (for [option options :let [value (value-key option)]]
+                [:option {:key value :value value :selected (= (get-in @v kp) value)} (display-key option)]))]]]))
 
 (defn oxygen-saturations
-  "Component to record o2 saturations and air/oxygen/device, with results pushed as map to atom (v) via keypath (kp)"
-  [v kp]
+  "Component to record o2 saturation and air/oxygen/device, with results pushed as map to atom (v) via keypath (kp)"
+  [v kp & {:keys [errors]}]
   {:pre [(vector? kp)]}
-  (fn []
-    [:div.field.is-horizontal
-     [:div.field-label.is-normal
-      [:label.label "Oxygen saturations"]]
-     [:div.field-body
-      [:div.field
-       [:p.control.is-expanded.has-icons-left
-        [:input.input {:type      "text" :placeholder "O2 sats"
-                       :value     (get-in @v (conj kp :o2-saturations))
-                       :on-change #(swap! v assoc-in (conj kp :o2-saturations) (-> % .-target .-value))}]
-        [:span.icon.is-small.is-left
-         [:i.fas.fa-lungs]]]]
-      [:div.field
-       [:div.control
-        [:label.radio
-         [:input {:type "radio" :name "answer"}] " On air"]
-        [:label.radio
-         [:input {:type "radio" :name "answer"}] " On oxygen"]]]]]))
+  [:div.field
+   [:label.label "% Oxygen saturation"]
+   [:div.field.is-grouped.is-grouped-multiline
+    [:div.field.has-addons
+     [:div.control
+      [:input.input {:class     (if (contains? errors kp) :is-danger)
+                     :type      "number" :placeholder "O2" :size 8
+                     :value     (get-in @v (conj kp :o2-saturations :result))
+                     :on-change #(swap! v assoc-in (conj kp :o2-saturations :result) (-> % .-target .-value))}]
+      ]
+     [:p.control [:a.button.is-static "%"]]]
+    [:div.control
+     [form-select :v v :kp (conj kp :o2-saturations :device) :options news/ventilation
+      :display-key #(str (:abbreviation %) ": " (str/capitalize (str/replace (name (:value %)) "-" " ")))
+      :value-key :value]]
+    (when (some #{:fiO2} (get-in @v (conj kp :o2-saturations :device :properties)))
+      [:<> [:div.field.has-addons [:div.control
+                                   [form-number-field v [kp :o2-saturations :fiO2] :placeholder "FiO2" :size 8]]
+            [:p.control [:a.button.is-static "%"]]]])
+    (when (some #{:flow-rate} (get-in @v (conj kp :o2-saturations :device :properties)))
+      [:<> [:div.field.has-addons [:div.control
+                                   [form-number-field v [kp :o2-saturations :flow-rate] :placeholder "Flow rate" :size 8]]
+            [:p.control
+             [:a.button.is-static "L/min"]]]])]])
 
 
 
 (defn respiratory-rate
-  "Component to record respiratory rate, with result pushed to atom (v) using key path (kp) (a vector of keys)"
-  [v kp]
+  "Specialised component to record respiratory rate, with result pushed to atom (v) using key path (kp) (a vector of keys)"
+  [v kp & {:keys [errors]}]
   {:pre [(vector? kp)]}
-  (let [current-time (rf/subscribe [:current-time])
+  (reagent/with-let [current-time (rf/subscribe [:current-time])
         timer (reagent/atom {:start nil :status :not-running :breaths 0})
         stop-timer #(let [duration (/ (- @current-time (:start @timer)) 1000) ;; milliseconds -> seconds
                           result (* (/ (:breaths @timer) duration) 60)]
                       (swap! v assoc-in kp (int result))
                       (reset! timer {:start nil :status :not-running :breaths 0}))
         start-timer #(reset! timer {:start @current-time :status :running :breaths 0})]
-    (fn [value]
-      (cond
-        ;; timer isn't running, so show a text field and a button to start the timer
-        (= (:status @timer) :not-running)
-        [:div.field.has-addons [:label.label "Respiratory rate " [:p.help "Breaths per minute"]]
-         [:div.control.has-icons-left.has-icons-right
-          [:input.input {:type      " text " :placeholder " Respiratory rate " :value (get-in @v kp)
-                         :on-change #(swap! v assoc-in kp (-> % .-target .-value))}]
-          [:span.icon.is-small.is-left [:i.fas.fa-lungs]] (comment [:span.icon.is-small.is-right [:i.fas.fa-check]])]
-         [:div.control
-          [:a.button.is-info {:on-click start-timer} "  Start timer  "]]]
+    [:div.field
+     [:label.label "Respiratory rate "]
+     (cond
+       ;; timer isn't running, so show a text field and a button to start the timer
+       (= (:status @timer) :not-running)
+       [:div.field.has-addons
+        [:div.control
+         [:input.input {:class      (if (contains? errors kp) :is-error)
+                        :type       "number" :placeholder " Respiratory rate " :value (get-in @v kp)
+                        :auto-focus true
+                        :on-change  #(swap! v assoc-in kp (-> % .-target .-valueAsNumber))}]
+         ]
+        [:p.control
+         [:a.button.is-static "/min"]]
+        [:div.control
+         [:a.button.is-info {:on-click start-timer} "  Start timer  "]]]
 
-        ;; timer is running, so show the countdown from 60 seconds and count the number of breaths recorded
-        (= (:status @timer) :running)
-        [:div.field.has-addons [:label.label "Respiratory rate " [:p.help "Breaths per minute"]]
-         [:div.control.has-icons-left.has-icons-right.is-loading
-          [:input.input {:type " text " :disabled true :value (str (:breaths @timer) " breaths in " (int (/ (- @current-time (:start @timer)) 1000)) "s")}]
-          [:span.icon.is-small.is-left [:i.fas.fa-lungs]] (comment [:span.icon.is-small.is-right [:i.fas.fa-check]])]
+       ;; timer is running, so show the countdown from 60 seconds and count the number of breaths recorded
+       (= (:status @timer) :running)
+       [:div.field.has-addons
+        [:div.control.has-icons-left.has-icons-right.is-loading
+         [:input.input {:type "text" :disabled true :value (str (:breaths @timer) " breaths in " (int (/ (- @current-time (:start @timer)) 1000)) "s")}]
+         [:span.icon.is-small.is-left [:i.fas.fa-lungs]] (comment [:span.icon.is-small.is-right [:i.fas.fa-check]])]
+        [:div.control
+         [:a.button.is-info {:on-click #(swap! timer update-in [:breaths] inc)} "Count breath"]
+         [:a.button.is-danger {:on-click stop-timer} "Stop timer"]]])
+     [:p.help "Count the number of breaths in one minute"]]))
+
+(def empty-news {:respiratory-rate nil
+                 :pulse            nil
+                 :temperature      nil
+                 :spO2             nil
+                 :ventilation      nil
+                 :consciousness    nil})
+
+(defn form-early-warning-score
+  [save-func]
+  (let [results (reagent/atom {})
+        dt (reagent/atom (cljs-time.format/unparse (:date-hour-minute cljs-time.format/formatters) (cljs-time.core/now)))
+        errors (reagent/atom nil)
+        ignore-missing (reagent/atom false)
+        ]
+    (fn []
+      [:div.columns
+       [:div.column.is-7
+        [respiratory-rate results [:respiratory-rate] :errors @errors :validate ::news/respiratory-rate]
+        [oxygen-saturations results [:spO2] :errors @errors]
+        ;;  [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
+        [:div.field [:label.label "Pulse rate"]
+         [:div.field.has-addons
+          [form-number-field results [:pulse] :size 8 :errors @errors]
+          [:p.control [:a.button.is-static "beats/min"]]]]
+        [:div.field [:label.label "Blood pressure"]
+         [:div.field.has-addons
+          [form-number-field results [:blood-pressure :systolic] :placeholder "Systolic" :size 8 :errors @errors]
+          [:p.control [:a.button.is-static "/"]]
+          [form-number-field results [:blood-pressure :diastolic] :placeholder "Diastolic" :size 8 :errors @errors]
+          [:p.control [:a.button.is-static "mmHg"]]]]
+        [:div.field [:label.label "Temperature"]
+         [:div.field.has-addons
+          [form-number-field results [:temperature] :size 8 :errors @errors]
+          [:p.control
+           [:a.button.is-static "ºC"]]]]
+        [:div.field [:label.label "Consciousness"]
+         [form-select :v results :kp [:consciousness] :options news/consciousness
+          :display-key :display-name :value-key :value :no-selection-string "Not assessed" :errors @errors]
+         [:p.help (get-in @results [:consciousness :description])]]]
+       [:div.column.is-5
+        (when-not (empty? @errors)
+          [:article.message.is-danger
+           [:div.message-header
+            [:p "Validation error"]
+            [:button.delete {:aria-label "delete"
+                             :on-click   #(reset! errors nil)}]]
+           [:div.message-body [:p "You have entered incorrect information. Please check and try again."]
+            [:div.content [:ul (for [err @errors] [:li (apply #(str/capitalize (str/replace (str %) "-" " ")) (mapv name err))])]
+             [:p [:label.checkbox
+                  [:input {:type      "checkbox" :checked @ignore-missing
+                           :on-change #(swap! ignore-missing not)}] " Ignore missing information"]]
+             [:pre (s/explain-str ::news/news (if @ignore-missing @results (merge empty-news @results)))]]]])
+        [:div.field
+         [:label.label "Date / time of observation"]
+
          [:div.control
-          [:a.button.is-info {:on-click #(swap! timer update-in [:breaths] inc)} "Count breath"]
-          [:a.button.is-danger {:on-click stop-timer} "Stop timer"]]]))))
+          [:input.input {:type      "datetime-local" :max (cljs-time.format/unparse (:date-hour-minute cljs-time.format/formatters) (cljs-time.core/now))
+                         :value     @dt
+                         :on-change #(let [val (-> % .-target .-valueAsNumber) ;; get unix timestamp from native datetime field
+                                           date-time (cljs-time.coerce/from-long val)]
+                                       (reset! dt (cljs-time.format/unparse (:date-hour-minute cljs-time.format/formatters) date-time)))
+                         }]]]
+        [:div.field
+         [:div.buttons
+          [:button.button.is-primary.is-large
+           {:on-click #(let [e1 (s/explain-data ::news/news (if @ignore-missing @results (merge empty-news @results)))
+                             e2 (map :path (:cljs.spec.alpha/problems e1))
+                             e3 (conj e2 (if (time-core/after? (cljs-time.format/parse (:date-hour-minute cljs-time.format/formatters) @dt) (time-core/now)) [:date-time] []))
+                             e4 (remove empty? e3)
+                             has-errors (seq e4)]
+                         (if has-errors (do (print "validation errors: " e4)
+                                            (reset! errors (set e4)))
+                                        (do (js/console.log "wooohoo no validation errors!")
+                                            (reset! errors [])
+                                            (print @results))))} "Save"]]]]])))
 
 (defn show-patient-name
   "Nicely displays a patient name"
@@ -344,46 +460,40 @@
                 {:date-time (time-core/date-time 2020 4 18 19 2 45) :respiratory-rate 8 :consciousness :clin/alert}
                 {:date-time (time-core/date-time 2020 4 8 22 2 45) :respiratory-rate 14 :pulse-rate 120 :spO2 95 :air-or-oxygen :O2}
                 {:date-time (time-core/date-time 2020 4 8 10 2 45) :respiratory-rate 12 :pulse-rate 140}
-                {:date-time      (time-core/date-time 2020 4 7 9 2 45) :respiratory-rate 22 :pulse-rate 90 :spO2 88 :consciousness :clin/confused
-                 :blood-pressure {:systolic 201 :diastolic 110}}
+                {:date-time (time-core/date-time 2020 4 7 9 2 45) :respiratory-rate 22 :pulse-rate 90 :spO2 88 :consciousness :clin/confused :blood-pressure {:systolic 201 :diastolic 110}}
                 {:date-time (time-core/date-time 2020 4 6 11 2 45) :respiratory-rate 12}
                 {:date-time (time-core/date-time 2020 4 5 11 2 45) :respiratory-rate 12 :temperature 37.2}
                 {:date-time (time-core/date-time 2020 4 4 11 2 45) :respiratory-rate 12 :consciousness :clin/unresponsive}
                 {:date-time (time-core/date-time 2020 4 19 9 2 45) :respiratory-rate 12 :consciousness :clin/alert :pulse-rate 95 :temperature 37.2}
                 {:date-time (time-core/date-time 2020 5 6 9 11 12) :respiratory-rate 12 :consciousness :clin/unresponsive}
-                {:date-time (time-core/date-time 2020 5 8 18 11 12) :respiratory-rate 12 :consciousness :clin/alert :spO2 92
-                 :air-or-oxygen :air :pulse-rate 98 :blood-pressure {:systolic 120 :diastolic 80} :temperature 37}
+                {:date-time     (time-core/date-time 2020 5 8 18 11 12) :respiratory-rate 25 :consciousness :clin/unresponsive :spO2 78
+                 :air-or-oxygen :air :pulse-rate 130 :blood-pressure {:systolic 200 :diastolic 80} :temperature 40}
                 ])
-
 
 
 (defn render-data
   "Simple rendering of the NEWS data as a table. In time, this will evolve to a generic
   view encounters within an episode / across multiple episodes."
   [patient]
-  (let [show-news-chart? (reagent/atom false)
-        drawing-start-date (reagent/atom (time-core/minus (time-core/now) (time-core/days 27)))]
-    (fn []
-      (let [sorted-data (sort-by :date-time #(time-core/after? %1 %2) news-data)]
-        [:<>
-         [:table.table.is-striped.is-full-width
-          [:thead
-           [:tr [:th " Date / time" [:span.icon.is-small.is-left [:i.fas.fa-angle-down]]]
-            [:th "RR"] [:th "% O" [:sub "2"] ""] [:th "P"] [:th "BP"] [:th "Con"] [:th "T ºC"]
-            [:th "NEWS"]]]
-          [:tbody
-           (doall (for [x sorted-data]
-                    [:tr [:td (concierge/format-date-time (:date-time x))]
-                     [:td (:respiratory-rate x)]
-                     [:td (:spO2 x)]
-                     [:td (:pulse-rate x)]
-                     [:td (if-not (nil? (:blood-pressure x)) (str (get-in x [:blood-pressure :systolic]) "/" (get-in x [:blood-pressure :diastolic])))]
-                     [:td (string/capitalize (name (get x :consciousness "")))]
-                     [:td (:temperature x)]
-                     [:td]]))
-           [:tr [:td "1/5/2020 1414"] [:td "23"] [:td "92% (air)"] [:td "120"] [:td "145/90"] [:td "Alert"] [:td "1"]]
-           ]]
-         ]))))
+  (fn []
+    (let [sorted-data (sort-by :date-time #(time-core/after? %1 %2) news-data)
+          scored-data (news/score-all-news sorted-data false)] ;; TODO: deal with hypercapnia scoring]
+      [:<>
+       [:table.table.is-striped.is-full-width
+        [:thead
+         [:tr [:th " Date / time" [:span.icon.is-small.is-left [:i.fas.fa-angle-down]]]
+          [:th "RR"] [:th "% O" [:sub "2"] ""] [:th "P"] [:th "BP"] [:th "Con"] [:th "T ºC"]
+          [:th "NEWS"]]]
+        [:tbody
+         (doall (for [{x :results :as w} scored-data]
+                  [:tr [:td (concierge/format-date-time (:date-time w))]
+                   [:td (:respiratory-rate x)]
+                   [:td (:spO2 x)]
+                   [:td (:pulse-rate x)]
+                   [:td (when (:blood-pressure x) (str (get-in x [:blood-pressure :systolic]) "/" (get-in x [:blood-pressure :diastolic])))]
+                   [:td (string/capitalize (name (get x :consciousness "")))]
+                   [:td (:temperature x)]
+                   [:td (:news-score w)]]))]]])))
 
 
 ;; (doall (map #(let [x (+ 56 (calculate-x-for-scale start-date (:date-time %) scale))
@@ -391,47 +501,6 @@
 ;                    (vector
 ;                      :circle {:cx (+ 3.5 x) :cy (+ start-y y) :r "0.2" :stroke "black" :fill "black" :key (:date-time %)})
 ;                    ) sorted-data))
-
-
-(defn form-early-warning-score
-  [save-func]
-  (let [results (reagent/atom nil)
-        ]
-    (fn [value]
-      [:div
-
-       ;;  [snomed-autocomplete results [:diagnosis] "Diagnosis" "errrr"]
-
-       [respiratory-rate results [:resp-rate]]
-       [oxygen-saturations results [:o2-sats]]
-
-       [form-textfield results [:pulse] "Pulse rate" "Beats per minute"]
-       [form-textfield results [:bp] "Blood pressure" "Write as 120/80"]
-       [form-textfield results [:temperature] "Temperature" "e.g. 37.4C"]
-
-       [:div.field.is-horizontal
-        [:div.field-label.is-normal
-         [:label.label "Blood pressure"]]
-        [:div.field-body
-         [:div.field
-          [:p.control.is-expanded.has-icons-left
-           [:input.input {:type "text" :placeholder "Systolic"}]
-           [:span.icon.is-small.is-left
-            [:i.fas.fa-heart]]]]
-         [:div.field
-          [:p.control.is-expanded.has-icons-left.has-icons-right
-           [:input.input.is-success {:type "text" :placeholder "Diastolic"}]
-           [:span.icon.is-small.is-left
-            [:i.fas.fa-heart]]
-           [:span.icon.is-small.is-right
-            [:i.fas.fa-check]]]]]]
-
-
-       [:p "Results: "]
-       [:p "RR: " (:resp-rate @results) " score: " (clin/calc-news-respiratory (:resp-rate @results))]
-       [:p "o2 sats:" (get-in @results [:o2-sats :o2-saturations]) " score: " (clin/calc-news-o2-sats-scale-1 (get-in @results [:o2-sats :o2-saturations]))]
-       [:p "pulse: " (:pulse @results) " score: " (clin/calc-news-pulse (:pulse @results))]
-       [:p "temperature: " (:temperature @results) " score: " (clin/calc-news-temperature (:temperature @results))]])))
 
 
 
@@ -528,6 +597,7 @@
         (if-not (nil? cancel-func) [:a.card-footer-item {:on-click cancel-func} "Cancel"])]
        ])))
 
+
 (defn home-panel []
   (let [
         search (reagent/atom "")
@@ -542,6 +612,8 @@
         [:div.container
          [:div.columns
           [:div.column.is-3
+
+
 
            ; patient search box
            [:article.panel
@@ -641,9 +713,10 @@
 
 (defn patient-panel []
   (let [patient (rf/subscribe [:patient/current])
-        selected-tab (reagent/atom :chart)
+        selected-tab (reagent/atom :add)
         scale (reagent/atom :consecutive)
-        drawing-start-date (reagent/atom (news/default-start-date @scale 28 news-data))
+        default-start-date (news/default-start-date @scale 28 news-data)
+        drawing-start-date (reagent/atom default-start-date)
         hypercapnic? (reagent/atom true)]
     (fn []
       (set-hash! "/patient")
@@ -667,28 +740,30 @@
             [render-data @patient]
             (= :chart @selected-tab)
             [:<>
-            [:nav.level
-             [:div.level-left
-             [:div.buttons.is-centered
-              [:div.tabs.is-toggle
-               [:ul
-                [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 7))))} " << "]]
-                [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 1))))} " < "]]
-                [:li (if (= @scale :days) {:class "is-active"})
-                 [:a {:on-click #(reset! scale :days)}
-                  [:span "By day"]]]
-                [:li (if (= @scale :consecutive) {:class "is-active"})
-                 [:a {:on-click #(reset! scale :consecutive)}
-                  [:span "Consecutive"]]]
-                [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 1))))} " > "]]
-                [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]]
+             [:nav.level
+              [:div.level-left
+               [:div.buttons.is-centered
+                [:div.tabs.is-toggle
+                 [:ul
+                  [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 7))))} " << "]]
+                  [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/minus old (time-core/days 1))))} " < "]]
+                  [:li (if (= @scale :days) {:class "is-active"})
+                   [:a {:on-click #(reset! scale :days)}
+                    [:span "By day"]]]
+                  [:li (if (= @scale :consecutive) {:class "is-active"})
+                   [:a {:on-click #(reset! scale :consecutive)}
+                    [:span "Consecutive"]]]
+                  [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 1))))} " > "]]
+                  [:li [:a {:on-click #(swap! drawing-start-date (fn [old] (time-core/plus old (time-core/days 7))))} " >> "]]
+                  [:li [:a {:on-click #(reset! drawing-start-date default-start-date)} "Today "]]
+                  ]]
                 ]]
+              [:div.level-right
+               [:label.checkbox
+                [:input {:type "checkbox" :checked @hypercapnic? :on-click #(swap! hypercapnic? not)}] "Hypercapnic respiratory failure"]]]
+             [:div
+              [news/render-news-chart {:scale @scale} @drawing-start-date news-data @hypercapnic?]
               ]]
-             [:div.level-right
-              [:label.checkbox
-               [:input {:type "checkbox" :checked @hypercapnic? :on-click #(swap! hypercapnic? not)} ] "Hypercapnic respiratory failure"]]]
-             [news/render-news-chart {:scale @scale} @drawing-start-date news-data @hypercapnic?]
-             ]
             (= :add @selected-tab)
             [form-early-warning-score #()]
             :else [:div])

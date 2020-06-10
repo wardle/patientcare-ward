@@ -1,0 +1,8 @@
+body {
+  color: red;
+}
+
+select {
+  -webkit-transition: none;
+  transition: none;
+}

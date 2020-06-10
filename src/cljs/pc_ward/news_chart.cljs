@@ -2,6 +2,7 @@
   (:require
     [cljs-time.core :as time-core]
     [cljs-time.format :as time-format]
+    [cljs-time.predicates :as time-predicates]
     [clojure.spec.alpha :as s]
     ))
 
@@ -14,6 +15,36 @@
 (def colour-dark-blue "#36609D")
 (def colour-light-blue "#ACB3D1")
 (def colour-abcde "#7487B6")
+
+(defn news-score-to-colour
+  [s]
+  (print s)
+  (cond
+    (>= (:news-score s) 7) colour-score-3
+    (>= (:news-score s) 5) colour-score-2
+    :else "black"
+    ))
+
+
+(def ventilation [
+               {:value :air :abbreviation "A"}              ;; (breathing air)
+               {:value :nasal-cannula :abbreviation "N" :properties [:flow-rate]} ;; N (nasal cannula)
+               {:value :simple-mask :abbreviation "SM" :properties [:flow-rate]} ;; SM (simple mask)
+               {:value :venturi-mask :abbreviation "V" :properties [:fiO2]} ;; V (Venturi mask and percentage) eg V24, V28, V35, V40, V60
+               {:value :non-invasive-ventilation :abbreviation "NIV"} ;; NIV (patient on NIV system)
+               {:value :reservoir-mask :abbreviation "RM" :properties [:flow-rate]} ;; RM (reservoir mask)
+               {:value :tracheostomy-mask :abbreviation "TM"} ;; TM (tracheostomy mask)
+               {:value :cpap-mask :abbreviation "CP"}       ;; CP (CPAP mask)
+               {:value :humidified-oxygen :abbreviation "H" :properties [:fiO2]} ;; H (humidified oxygen and percentage) eg H28, H35, H40, H60)
+               ])
+
+(def consciousness [
+                    {:value :clin/alert :display-name "Alert" :description "A fully awake patient. Such patients will have spontaneous opening of the eyes, will respond to voice and will have motor function. "}
+                    {:value :clin/confused :display-name "New confusion" :description "A patient may be alert but confused or disorientated. It is not always possible to determine whether the confusion is ‘new’ when a patient presents acutely ill. Such a presentation should always be considered to be ‘new’ until confirmed to be otherwise. New-onset or worsening confusion, delirium or any other altered mentation should always prompt concern about potentially serious underlying causes and warrants urgent clinical evaluation."}
+                    {:value :clin/voice :display-name "Responds to voice" :description "The patient makes some kind of response when you talk to them, which could be in any of the three component measures of eyes, voice or motor – eg patient’s eyes open on being asked ‘Are you okay?’. The response could be as little as a grunt, moan, or slight movement of a limb when prompted by voice."}
+                    {:value :clin/pain :display-name "Responds to pain" :description "The patient makes a response to a pain stimulus. A patient who is not alert and who has not responded to voice (hence having the test performed on them) is likely to exhibit only withdrawal from pain, or even involuntary flexion or extension of the limbs from the pain stimulus. The person undertaking the assessment should always exercise care and be suitably trained when using a pain stimulus as a method of assessing levels of consciousness."}
+                    {:value :clin/unresponsive :display-name "Unresponsive" :description "This is also commonly referred to as ‘unconscious’. This outcome is recorded if the patient does not give any eye, voice or motor response to voice or pain."}])
+
 
 (defn in-range?
   "Is the number (n) within the range defined, inclusive, handling special case of missing start or end"
@@ -49,7 +80,7 @@
             :day-of-week (time-format/unparse day-week-formatter dt)
             :day-of-month (time-format/unparse day-month-formatter dt)
             :month (time-format/unparse month-formatter dt)
-            :is-today (if (nil? now) false (cljs-time.predicates/same-date? dt now))))
+            :is-today (if (nil? now) false (time-predicates/same-date? dt now))))
 
 (defn scale-one-day
   "A scale using one square per day, returning transformed data
@@ -138,7 +169,10 @@
 (s/def ::blood-pressure (s/keys :req-un [::systolic-bp] :opt-un [::diastolic-bp]))
 (s/def ::pulse pos-int?)
 (s/def ::consciousness #{:clin/alert :clin/confused :clin/voice :clin/pain :clin/unresponsive})
-(s/def ::temperature pos-int?)
+(s/def ::temperature pos?)
+(s/def ::ventilation (set (map :value ventilation)))
+(s/def ::spO2 (s/int-in 0 100))
+(s/def ::news (s/keys :req-un [::respiratory-rate ::spO2 ::ventilation ::temperature ::consciousness ::pulse ::blood-pressure]))
 
 (def respiratory-rate-chart
   {:heading    "A+B"
@@ -251,16 +285,19 @@
                            ))) categories))
 
 (defn render-scores
-  "Render scores using the title specified, scores a sequence of results, k a function to get score"
-  [y width title scores k]
+  "Render scores using the title specified, scores a sequence of results
+  kv: a function to get score
+  kc: a function to get colour"
+  [y width title scores kv kc]
   ; find out the maximum score for each (x) so we don't have overprinting
-  (let [sc (->> scores (sort-by k) (group-by :x) (vals) (map (comp (juxt :x k) last)))]
+  (let [sc (->> scores (sort-by kv) (group-by :x) (vals) (map (comp (juxt :x kv) last)))]
     [:<>
      [:rect {:x 0 :y (+ y 0) :width 56 :height 5 :stroke "black" :stroke-width 0.1 :fill colour-dark-blue}]
      [:text {:key title :x 5 :y (+ y 4) :fill "white" :font-size 4 :font-weight "bold"} title]
      [:rect {:x 56 :y y :width (* 7 width) :height 5 :stroke "black" :stroke-width 0.1 :fill "url(#grid-score-0"}]
      (remove nil? (map-indexed (fn [index [x score]]
-                                 [:text {:key (str x score) :x (+ 56 3.5 (* 7 x)) :y (+ y 4) :fill "black" :font-size 4 :text-anchor "middle"} score]) sc))]))
+                                 [:text {:key  (str x score) :x (+ 56 3.5 (* 7 x)) :y (+ y 4)
+                                         :fill "black" :font-size 4 :text-anchor "middle"} score]) sc))]))
 
 (defn render-axes
   "Renders the background for a chart using the labels
@@ -301,8 +338,8 @@
      [:text {:x (+ panel-width (/ label-width 2)) :y (+ y 9) :fill "black" :font-size "4" :text-anchor "middle"} "Date"]
      [:text {:x (+ panel-width (/ label-width 2)) :y (+ y 14) :fill "black" :font-size "4" :text-anchor "middle"} "Month"]
      (when show-times
-       [:rect {:x panel-width :y (+ y 15) :width label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]
-       [:text {:x (+ panel-width (/ label-width 2)) :y (+ y 19) :fill "black" :font-size "4" :text-anchor "middle"} "Time"])
+       [:<> [:text {:x (+ panel-width (/ label-width 2)) :y (+ y 19) :fill "black" :font-size "4" :text-anchor "middle"} "Time"]
+        [:rect {:x panel-width :y (+ y 15) :width label-width :height 5 :fill "none" :stroke "black" :stroke-width "0.1"}]])
      [:rect {:x left-column-width :y (+ y 0) :width px-width :height (if show-times 20 15) :stroke "black" :stroke-width 0.1 :fill "url(#grid-score-0"}]
      (doall (map-indexed (fn [index item]                   ;; highlight today's date
                            (if (:is-today item)
@@ -414,7 +451,8 @@
      [:<>
       [render-dates 0 0 scaled-dates config]
 
-      (render-scores (+ 20 time-adjust) width (if (= :days (:scale config)) "MAX NEWS TOTAL" "NEWS TOTAL") scaled-data :news-score)
+      (render-scores (+ 20 time-adjust) width
+                     (if (= :days (:scale config)) "MAX NEWS TOTAL" "NEWS TOTAL") scaled-data :news-score news-score-to-colour)
       [render-axes (+ 30 time-adjust) width respiratory-rate-chart]
       [render-results 0 (+ 30 time-adjust) scaled-data :respiratory-rate]
 
@@ -434,7 +472,7 @@
       (render-axes (+ 265 sp02-adjust) width temperature-chart)
       (render-results 0 (+ 265 sp02-adjust) scaled-data :temperature)
 
-      (render-scores (+ 300 sp02-adjust) width "NEWS TOTAL" scaled-data :news-score)
+      (render-scores (+ 300 sp02-adjust) width "NEWS TOTAL" scaled-data :news-score nil)
       (comment
         (plot-results 60 start-date width-in-boxes :day spO2-chart-2 data #(vector (:spO2 %) (:air-or-oxygen %)))
 
